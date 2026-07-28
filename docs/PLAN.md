@@ -828,33 +828,44 @@ $$;
 
 ### 6.5 每日到期排程
 
+**這裡有個容易寫錯的地方**：`UPDATE ... RETURNING` 回傳的是**新值**不是舊值，所以不能寫 `set balance = 0 ... returning balance`，那樣拿到的永遠是 0，ledger 會記錄「消滅了 0 元」。
+
+用 CTE 先撈舊值也有快照與併發修改的邊界情況。每天到期的人數只有幾十列，直接用逐列鎖定的迴圈，換來顯而易見的正確性：
+
 ```sql
--- 每日執行，把過期的餘額歸零並寫 ledger
 create or replace function expire_balances() returns int
 language plpgsql
 as $$
 declare
+  v_row   record;
   v_count int := 0;
 begin
-  with expired as (
-    update users
-       set balance = 0
+  for v_row in
+    select id, balance from users
      where balance > 0
        and balance_expires_at is not null
        and balance_expires_at < now()
-    returning id, balance as old_balance
-  )
-  insert into balance_transactions
-    (user_id, type, amount, balance_after, source_type)
-  select id, 'expire', -old_balance, 0, 'cron' from expired;
+     for update
+  loop
+    update users
+       set balance = 0, balance_expires_at = null
+     where id = v_row.id;
 
-  get diagnostics v_count = row_count;
+    insert into balance_transactions
+      (user_id, type, amount, balance_after, source_type, note)
+    values
+      (v_row.id, 'expire', -v_row.balance, 0, 'cron',
+       format('餘額到期歸零（%s 元）', v_row.balance));
+
+    v_count := v_count + 1;
+  end loop;
+
   return v_count;
 end;
 $$;
 ```
 
-用 Supabase `pg_cron` 每日凌晨 4 點執行，避開營業時間。
+用 Supabase `pg_cron` 每日凌晨 4 點執行，避開營業時間。實作見 `supabase/migrations/0002_functions.sql`。
 
 ### 6.6 對帳檢查
 
