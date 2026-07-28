@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 
 import { StaffPanel } from './staff-panel';
-import { getSettings } from '@/lib/settings';
 import { getStaffSession } from '@/lib/session';
 import { db } from '@/lib/supabase';
 
@@ -11,7 +10,6 @@ export default async function StaffPage() {
   const session = await getStaffSession();
   if (!session) redirect('/staff/login');
 
-  const settings = await getSettings();
   const today = startOfToday();
 
   // 今日統計。折抵金額是實際成本，比發放張數更該盯
@@ -41,7 +39,6 @@ export default async function StaffPage() {
     <StaffPanel
       staffName={session.name}
       isOwner={session.role === 'owner'}
-      maxRedeem={settings.max_redeem_per_visit}
       stats={{
         issued: issued.count ?? 0,
         drawn: drawn.count ?? 0,

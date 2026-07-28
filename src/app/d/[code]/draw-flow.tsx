@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button, Card, Screen } from '@/components/ui';
 import { formatForCustomer, progressToward } from '@/lib/points';
@@ -37,14 +37,6 @@ export function DrawFlow({
 
   const claimed = useRef(false);
 
-  // 已登入的人抽完就直接入帳，不需要多按一次
-  useEffect(() => {
-    if (phase !== 'revealed' || !user || claimed.current) return;
-    claimed.current = true;
-    void claim();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, user]);
-
   async function draw() {
     setPhase('spinning');
     setMessage(null);
@@ -73,7 +65,7 @@ export function DrawFlow({
     }
   }
 
-  async function claim() {
+  const claim = useCallback(async () => {
     setPhase('claiming');
 
     try {
@@ -100,7 +92,15 @@ export function DrawFlow({
       setPhase('error');
       setMessage('連線不穩，請確認網路後再試一次。');
     }
-  }
+  }, [code]);
+
+  // 已登入的人抽完就直接入帳，不需要多按一次。
+  // claimed ref 確保嚴格模式下的重複掛載不會領兩次
+  useEffect(() => {
+    if (phase !== 'revealed' || !user || claimed.current) return;
+    claimed.current = true;
+    void claim();
+  }, [phase, user, claim]);
 
   if (phase === 'error') {
     return (
@@ -132,7 +132,6 @@ export function DrawFlow({
 
       <Reel
         prizes={prizes}
-        settings={settings}
         target={prize}
         spinning={phase === 'spinning'}
         revealed={phase !== 'idle' && phase !== 'spinning'}
@@ -172,13 +171,11 @@ export function DrawFlow({
  */
 function Reel({
   prizes,
-  settings,
   target,
   spinning,
   revealed,
 }: {
   prizes: Prize[];
-  settings: Settings;
   target: PrizeSnapshot | null;
   spinning: boolean;
   revealed: boolean;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useRef, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 
 import {
   issueTokenAction,
@@ -25,12 +25,10 @@ interface LookedUpUser {
 export function StaffPanel({
   staffName,
   isOwner,
-  maxRedeem,
   stats,
 }: {
   staffName: string;
   isOwner: boolean;
-  maxRedeem: number;
   stats: {
     issued: number;
     drawn: number;
@@ -83,7 +81,7 @@ export function StaffPanel({
         </TabButton>
       </nav>
 
-      {tab === 'redeem' ? <RedeemTab maxRedeem={maxRedeem} /> : null}
+      {tab === 'redeem' ? <RedeemTab /> : null}
       {tab === 'coupon' ? <CouponTab /> : null}
       {tab === 'issue' ? <IssueTab /> : null}
     </main>
@@ -136,27 +134,13 @@ function TabButton({
 // 折抵
 // ---------------------------------------------------------------
 
-function RedeemTab({ maxRedeem }: { maxRedeem: number }) {
+function RedeemTab() {
   const [lookup, lookupFn, looking] = useActionState(lookupAction, null);
   const [redeem, redeemFn, redeeming] = useActionState(redeemAction, null);
   const [undo, undoFn, undoing] = useActionState(undoAction, null);
 
-  const [amount, setAmount] = useState(0);
-  const [confirmRepeat, setConfirmRepeat] = useState(false);
-
-  // 冪等鍵在使用者開始一筆折抵時固定住。重送同一個 key 不會重複扣款，
-  // 店員在收訊差的環境按了確認沒反應又按一次時就靠這個
-  const idemKey = useRef(crypto.randomUUID());
-
   const user = lookup && 'user' in lookup ? (lookup.user as LookedUpUser) : null;
   const success = redeem && 'success' in redeem ? redeem.success : null;
-
-  useEffect(() => {
-    if (user) {
-      setAmount(Math.min(user.balance, user.maxRedeem));
-      idemKey.current = crypto.randomUUID();
-    }
-  }, [user]);
 
   if (success && !undo?.undone) {
     return (
@@ -249,11 +233,42 @@ function RedeemTab({ maxRedeem }: { maxRedeem: number }) {
     );
   }
 
+  // 用 key 讓每查詢一位新客人就重建元件，金額與冪等鍵自然回到初始值。
+  // 這比在 effect 裡 setState 乾淨，也不會有串場的殘留狀態
+  return (
+    <RedeemForm
+      key={user.id}
+      user={user}
+      action={redeemFn}
+      pending={redeeming}
+      error={redeem && 'error' in redeem ? redeem.error : null}
+    />
+  );
+}
+
+function RedeemForm({
+  user,
+  action,
+  pending,
+  error,
+}: {
+  user: LookedUpUser;
+  action: (formData: FormData) => void;
+  pending: boolean;
+  error?: string | null;
+}) {
   const usable = Math.min(user.balance, user.maxRedeem);
   const quick = [10, 20, 30].filter((v) => v <= usable);
 
+  const [amount, setAmount] = useState(usable);
+  const [confirmRepeat, setConfirmRepeat] = useState(false);
+
+  // 冪等鍵在這筆折抵開始時就固定住。重送同一個 key 不會重複扣款，
+  // 店員在收訊差的環境按了確認沒反應又按一次時就靠這個
+  const [idemKey] = useState(() => crypto.randomUUID());
+
   return (
-    <form action={redeemFn} className="space-y-4">
+    <form action={action} className="space-y-4">
       <Card className="text-center">
         <p className="text-lg font-bold">{user.name}</p>
         <p className="tabular mt-3 text-5xl font-black text-brand-600">
@@ -266,7 +281,7 @@ function RedeemTab({ maxRedeem }: { maxRedeem: number }) {
       </Card>
 
       <input type="hidden" name="userId" value={user.id} />
-      <input type="hidden" name="idempotencyKey" value={idemKey.current} />
+      <input type="hidden" name="idempotencyKey" value={idemKey} />
       <input type="hidden" name="amount" value={amount} />
 
       <Card>
@@ -305,8 +320,8 @@ function RedeemTab({ maxRedeem }: { maxRedeem: number }) {
         </div>
       </Card>
 
-      {redeem && 'error' in redeem && redeem.error ? (
-        <p className="text-center font-medium text-bad">{redeem.error}</p>
+      {error ? (
+        <p className="text-center font-medium text-bad">{error}</p>
       ) : null}
 
       {/* 誤觸的代價是客人的錢，所以確認鍵跟其他鍵拉開距離 */}
@@ -314,16 +329,16 @@ function RedeemTab({ maxRedeem }: { maxRedeem: number }) {
         <Button
           type={confirmRepeat ? 'submit' : 'button'}
           size="lg"
-          disabled={redeeming || amount <= 0}
+          disabled={pending || amount <= 0}
           onClick={confirmRepeat ? undefined : () => setConfirmRepeat(true)}
         >
-          {redeeming
+          {pending
             ? '處理中⋯'
             : confirmRepeat
               ? `確定要折抵 ${amount} 元`
               : `折抵 ${amount} 元`}
         </Button>
-        {confirmRepeat && !redeeming ? (
+        {confirmRepeat && !pending ? (
           <button
             type="button"
             onClick={() => setConfirmRepeat(false)}
@@ -396,28 +411,19 @@ function CouponTab() {
 // ---------------------------------------------------------------
 
 function IssueTab() {
-  const [issued, setIssued] = useState<{
-    code: string;
-    ttl: number;
-    svg: string;
-  } | null>(null);
+  const [issued, setIssued] = useState<{ code: string; svg: string } | null>(
+    null,
+  );
   const [left, setLeft] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 倒數只是給店員看的提示，真正的到期判定在伺服器端。
+  // setState 放在 interval 的 callback 裡而不是 effect 本體，
+  // 前者是允許的，後者會造成串聯重繪
   useEffect(() => {
     if (!issued) return;
-    setLeft(issued.ttl);
-    const timer = setInterval(() => {
-      setLeft((n) => {
-        if (n <= 1) {
-          clearInterval(timer);
-          setIssued(null);
-          return 0;
-        }
-        return n - 1;
-      });
-    }, 1000);
+    const timer = setInterval(() => setLeft((n) => Math.max(0, n - 1)), 1000);
     return () => clearInterval(timer);
   }, [issued]);
 
@@ -427,27 +433,42 @@ function IssueTab() {
     const result = await issueTokenAction();
     setBusy(false);
 
-    if ('error' in result && result.error) {
+    if ('error' in result) {
       setError(result.error);
       return;
     }
-    if ('code' in result) {
-      setIssued({ code: result.code, ttl: result.ttl, svg: result.svg });
-    }
+
+    setIssued({ code: result.code, svg: result.svg });
+    setLeft(result.ttl);
   }
 
   if (issued) {
+    // 過期後不自動消失，改成顯示已失效。店員看到 QR 突然不見會困惑，
+    // 明確告訴他要重新產生比較好
     return (
       <Card className="text-center">
-        <p className="text-sm text-ink-soft">請客人掃描</p>
-        <div
-          className="mx-auto mt-4 w-fit rounded-2xl bg-white p-2"
-          dangerouslySetInnerHTML={{ __html: issued.svg }}
-        />
-        <p className="mt-4 text-2xl font-black text-brand-600">
-          {left} 秒後失效
-        </p>
-        <p className="mt-1 text-sm text-ink-faint">只能被掃描一次</p>
+        {left > 0 ? (
+          <>
+            <p className="text-sm text-ink-soft">請客人掃描</p>
+            <div
+              className="mx-auto mt-4 w-fit rounded-2xl bg-white p-2"
+              dangerouslySetInnerHTML={{ __html: issued.svg }}
+            />
+            <p className="mt-4 text-2xl font-black text-brand-600">
+              {left} 秒後失效
+            </p>
+            <p className="mt-1 text-sm text-ink-faint">只能被掃描一次</p>
+          </>
+        ) : (
+          <>
+            <p className="py-10 text-xl font-bold text-ink-faint">
+              這組 QR 已失效
+            </p>
+            <Button type="button" onClick={issue} disabled={busy}>
+              {busy ? '產生中⋯' : '重新產生'}
+            </Button>
+          </>
+        )}
       </Card>
     );
   }
