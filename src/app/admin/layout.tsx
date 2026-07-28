@@ -7,6 +7,7 @@ const NAV = [
   { href: '/admin/prizes', label: '獎項' },
   { href: '/admin/tokens', label: '序號' },
   { href: '/admin/credits', label: '點數' },
+  { href: '/admin/push', label: '推播' },
   { href: '/admin/settings', label: '設定' },
 ] as const;
 

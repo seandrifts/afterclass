@@ -50,6 +50,9 @@ export interface Settings {
   pity_enabled: boolean;
   pity_threshold: number;
 
+  push_enabled: boolean;
+  push_expiry_enabled: boolean;
+
   rules_content: string;
 
   updated_at: string;
@@ -116,6 +119,7 @@ export interface User {
   last_visit_at: string | null;
   visit_count: number;
   is_blocked: boolean;
+  line_unreachable_at: string | null;
 }
 
 export interface DrawToken {

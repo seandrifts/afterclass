@@ -55,4 +55,7 @@ export const env = {
   },
 
   cronSecret: () => required('CRON_SECRET'),
+
+  /** 官方帳號推播用。沒設定時推播功能會自動跳過，不會讓整個排程失敗 */
+  lineMessagingToken: () => process.env.LINE_MESSAGING_TOKEN ?? null,
 };
