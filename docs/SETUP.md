@@ -28,6 +28,20 @@ Region 選東京。台灣連東京的延遲大約 30ms，選美國會變 150ms �
 
 4. 按 **Create new project**，等約 2 分鐘
 
+### 如果你想沿用既有的專案
+
+**先確認那個專案是空的。**我們的表用了 `users`、`settings`、`staff`
+這類常見名稱，如果專案裡已經有別的應用在跑，建表會撞名而中斷。
+
+在 SQL Editor 跑這段：
+
+```sql
+select tablename from pg_tables where schemaname = 'public' order by tablename;
+```
+
+回傳 0 列才可以繼續。有其他表的話，另外開一個新專案給抽獎系統用，
+免費方案可以開兩個。
+
 ---
 
 ## 步驟 2：執行三個 SQL 檔
@@ -107,23 +121,46 @@ select shop_name, campaign_active, credit_expire_days,
 
 ## 步驟 4：拿到連線資訊
 
-左側選單最下面 **Project Settings** → **API**（新版介面可能在
-**Settings** → **API Keys**）。
+### Project URL
 
-需要複製兩個值：
+最快的方法是看瀏覽器網址列。Dashboard 的網址長這樣：
 
-| 畫面上的名稱 | 對應到 `.env.local` 的 |
-|---|---|
-| **Project URL** | `NEXT_PUBLIC_SUPABASE_URL` |
-| **service_role** `secret` | `SUPABASE_SERVICE_ROLE_KEY` |
+```
+supabase.com/dashboard/project/【一串英數】/...
+```
 
-`service_role` 預設是遮住的，按旁邊的眼睛圖示或 **Reveal** 才看得到。
+那串英數就是 project ref，Project URL 就是：
+
+```
+https://【那串英數】.supabase.co
+```
+
+也可以從左側 **Settings** → **Data API** 那頁確認。
+
+### Secret key
+
+左側 **Settings** → **API Keys**。
+
+畫面分成兩區，**只需要下面那區**：
+
+| 區塊 | 用途 | 我們要嗎 |
+|---|---|---|
+| Publishable key（`sb_publishable_…`） | 前端用，受 RLS 限制 | 不需要 |
+| **Secret key（`sb_secret_…`）** | **伺服器端用，繞過 RLS** | **要這個** |
+
+Secret key 預設是遮住的，按右邊的**眼睛圖示**顯示，再按複製圖示。
+
+> **舊版介面的使用者**：Supabase 新版把 `service_role` 改名為
+> **Secret key**、`anon` 改名為 **Publishable key**。如果你的專案還是
+> 舊介面，就複製 `service_role` 那把，作用完全相同。
+>
+> `@supabase/supabase-js` 2.110 以上兩種格式都支援，不用改程式。
 
 **這把 key 等於資料庫的完整權限。**它可以繞過所有 RLS 讀寫任何資料。
 絕對不要貼到聊天室、截圖、或任何前端程式碼裡。只放在 `.env.local`
 和 Vercel 的環境變數設定裡。
 
-旁邊還有一把 `anon` public key，這個專案用不到，不用複製。
+真的不小心外流了，回這個頁面按該列右邊的 `⋮` 可以撤銷並重新產生。
 
 ---
 
