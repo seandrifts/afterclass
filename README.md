@@ -24,7 +24,7 @@ cp .env.example .env.local
 | 變數 | 從哪來 |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | [Supabase Dashboard](https://supabase.com/dashboard) 專案的 Settings › API |
-| `LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` | [LINE Developers](https://developers.line.biz) 建立 LINE Login Channel，Callback URL 設為 `{站台網址}/auth/line/callback` |
+| `LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` | [LINE Developers](https://developers.line.biz) 建立 LINE Login Channel，Callback URL 設為 `{SITE_URL}/auth/line/callback` |
 | `SESSION_SECRET` | `openssl rand -base64 32` |
 | `CRON_SECRET` | `openssl rand -base64 32` |
 

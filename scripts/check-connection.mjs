@@ -25,7 +25,7 @@ function bad(label, hint) {
 console.log('\n[1] 環境變數');
 
 const REQUIRED = [
-  ['NEXT_PUBLIC_SITE_URL', false],
+  ['SITE_URL', false],
   ['NEXT_PUBLIC_SUPABASE_URL', false],
   ['SUPABASE_SERVICE_ROLE_KEY', true],
   ['SESSION_SECRET', true],
