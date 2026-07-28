@@ -11,9 +11,16 @@ import { randomInt } from 'node:crypto';
  */
 const CARD_ALPHABET = 'ACDEFGHJKMNPQRTUVWXY34679';
 
-/** 動態 QR 的字集可以寬鬆一點，因為沒有人會手動輸入 */
-const DYNAMIC_ALPHABET =
-  'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+/**
+ * 動態 QR 的字集。
+ *
+ * 必須維持「只有大寫與數字」。查序號的路徑會先經過 normalizeCode()
+ * 轉大寫（為了讓客人手動輸入紙卡序號時不分大小寫），字集若含小寫，
+ * 產生出來的序號轉大寫之後就查不到自己了。
+ *
+ * 字元比紙卡多一些是可以的，因為動態 QR 沒有人會用手抄。
+ */
+const DYNAMIC_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 function pick(alphabet: string, length: number): string {
   let out = '';
