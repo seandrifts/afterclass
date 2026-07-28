@@ -4,21 +4,29 @@
 
 ---
 
-## 0. 待填參數
+## 0. 參數全部由後台控制
 
-開工前這幾個數字要先確定，會直接影響獎項機率表：
+**設計原則：任何數字都不寫死在程式碼裡。**獎項名稱、成本、機率、券有效期、使用門檻、活動開關、成本上限，全部存資料庫，由後台隨時修改，改完立即生效，不用重新部署。
 
-| 項目 | 目前假設 | 你的實際值 |
+下表是**初始值**（開工時先填進資料庫），之後都在後台改：
+
+| 項目 | 初始假設 | 後台位置 |
 |---|---|---|
-| 店名 | （待填） | |
-| 平均客單價 | 120 元 | |
-| 平均毛利率 | 55% | |
-| 每日來客數 | 80 人 | |
-| 尖峰時段來客數 | 40 人 / 2 小時 | |
-| 熟客回訪頻率 | 每週 1~2 次 | |
-| 可接受的活動成本 | 營業額 3~5% | |
-| 是否有請員工（非家人） | 否 | |
-| 是否有 LINE 官方帳號 | 否 | |
+| 店名 | （待填） | 設定 › 品牌 |
+| 平均客單價 | 120 元 | 設定 › 成本試算 |
+| 平均毛利率 | 55% | 設定 › 成本試算 |
+| 每日來客數 | 80 人 | 設定 › 成本試算 |
+| 每月成本上限 | 10,000 元 | 設定 › 成本煞車 |
+| 券預設有效期 | 21 天 | 獎項管理（可逐項設定） |
+| 每次消費限用券數 | 1 張 | 設定 › 活動規則 |
+| 紙卡序號有效期 | 90 天 | 設定 › 活動規則 |
+| 動態 QR 存活秒數 | 60 秒 | 設定 › 活動規則 |
+| 抽完到登入的領取時限 | 30 分鐘 | 設定 › 活動規則 |
+| 各獎項機率與成本 | 見 §3.2 | 獎項管理 |
+
+**唯一需要你現在提供的**是實物獎品的真實成本（滷蛋、加麵、飲料各多少錢），因為這個我沒辦法猜。其他都可以先填假設值上線後再調。
+
+後台詳細規格見 [`ADMIN.md`](./ADMIN.md)。
 
 ---
 
@@ -222,16 +230,18 @@
 
 ### 5.2 老闆後台（`/admin`）
 
-| 功能 | 說明 |
+完整規格見 [`ADMIN.md`](./ADMIN.md)。核心概念：**所有參數都在後台改，改完立即生效，不用重新部署。**
+
+| 頁面 | 功能 |
 |---|---|
 | 儀表板 | 今日/本週/本月：發放、抽獎、核銷、實際成本、新客數、回訪率 |
-| 獎項管理 | 調整獎項、機率、庫存、上下架。**機率總和必須等於 100%，後端強制驗證** |
-| 序號管理 | 批次產生、分批啟用、作廢、匯出 PDF |
-| 券管理 | 查詢所有券狀態、手動作廢、手動補發 |
+| 獎項管理 | 調整獎項、機率、成本、庫存、上下架，**含即時期望成本試算與模擬器** |
+| 序號管理 | 批次產生、分批啟用、作廢、匯出印刷 PDF |
+| 券管理 | 查詢所有券、手動作廢、手動補發 |
 | 會員名單 | LINE 名單、消費次數、最後來店日、匯出 CSV |
-| 店員管理 | 新增店員、PIN 管理、查每位店員發放/核銷紀錄 |
-| 成本報表 | 名目成本 vs 實際核銷成本，可比對營業額 |
-| 活動開關 | 一鍵暫停活動（成本失控時的煞車） |
+| 店員管理 | 新增店員、PIN 管理、查每位店員發放/核銷紀錄與對帳 |
+| 報表 | 名目成本 vs 實際核銷成本、獎項分佈、時段分析 |
+| 設定 | 品牌、活動規則、成本煞車、活動辦法內文、活動總開關 |
 
 ### 5.3 對帳機制
 
@@ -250,23 +260,67 @@
 
 Supabase (PostgreSQL)。所有表開 RLS。
 
+### 6.0 兩個必須遵守的原則
+
+**原則一：獎項只能停用，不能刪除。**已發出的券會參照到獎項，硬刪會造成孤兒資料與報表斷裂。後台的「刪除」按鈕實際執行 `is_active = false`。
+
+**原則二：券必須快照中獎當下的獎項內容。**
+
+這是很容易踩的坑。如果 `coupons` 只存 `prize_id`，顯示時 join `prizes` 撈名稱，那老闆在後台把「滷蛋一顆」改名成「豆干一份」的瞬間，**所有已發出但還沒核銷的滷蛋券會全部變成豆干券**。客人抽到的東西被追溯性竄改，這是實打實的客訴。
+
+解法：抽獎當下把獎項內容整包 snapshot 成 jsonb 存進 token，領取時複製到 coupon。之後老闆怎麼改後台，已發出的券都不受影響。`prize_id` 保留純粹作為報表分組用。
+
+同理，`cost` 也要快照。成本會浮動（滷蛋今天 5 元下個月 6 元），報表要算的是「當時的成本」。
+
 ### 6.1 Schema
 
 ```sql
--- 使用者
-create table users (
-  id            uuid primary key default gen_random_uuid(),
-  line_user_id  text unique,
-  email         text unique,
-  display_name  text,
-  avatar_url    text,
-  created_at    timestamptz default now(),
-  last_visit_at timestamptz,
-  visit_count   int default 0,
-  is_blocked    boolean default false
-);
+-- 全域設定（單列表，id 固定為 1）
+create table settings (
+  id                       int primary key default 1 check (id = 1),
 
--- 獎項設定
+  -- 品牌
+  shop_name                text not null default '',
+  logo_url                 text,
+  primary_color            text default '#E4572E',
+
+  -- 活動開關
+  campaign_active          boolean default false,
+  campaign_start_at        timestamptz,
+  campaign_end_at          timestamptz,
+  paused_reason            text,
+
+  -- 活動規則
+  default_valid_days       int  default 21,   -- 券預設有效天數
+  max_coupons_per_visit    int  default 1,    -- 每次消費限用幾張券
+  card_token_valid_days    int  default 90,   -- 紙卡序號有效天數
+  dynamic_token_ttl_sec    int  default 60,   -- 動態 QR 存活秒數
+  claim_window_minutes     int  default 30,   -- 抽完到登入領取的時限
+  allow_stack_promo        boolean default false,
+
+  -- 成本試算基準（報表用，不影響邏輯）
+  avg_ticket               int  default 120,
+  gross_margin_pct         int  default 55,
+  daily_customers          int  default 80,
+
+  -- 成本煞車
+  monthly_cost_cap         int,               -- null = 不限
+  cost_cap_action          text default 'notify',  -- 'notify' | 'pause'
+  cost_cap_notified_at     timestamptz,
+
+  -- 保底機制
+  pity_enabled             boolean default false,
+  pity_threshold           int  default 20,
+
+  -- 活動辦法（後台可編輯的富文本）
+  rules_content            text default '',
+
+  updated_at               timestamptz default now(),
+  updated_by               uuid
+);
+insert into settings (id) values (1);
+
+-- 獎項設定（可隨時在後台調整）
 create table prizes (
   id            uuid primary key default gen_random_uuid(),
   name          text not null,              -- 「滷蛋一顆」
@@ -279,11 +333,38 @@ create table prizes (
   weight        int not null,               -- 權重（非百分比，避免浮點誤差）
   stock         int,                        -- null = 無限
   stock_used    int default 0,
-  valid_days    int default 21,             -- 中獎後幾天到期
+  valid_days    int,                        -- null = 用 settings.default_valid_days
+  terms         text,                       -- 這張券的專屬使用條件
   image_url     text,
+  color         text,                       -- 轉盤上的區塊顏色
   sort_order    int default 0,
-  is_active     boolean default true,
+  is_active     boolean default true,       -- 停用而非刪除
+  created_at    timestamptz default now(),
+  updated_at    timestamptz default now()
+);
+
+-- 獎項異動紀錄（爭議舉證 + 防止偷改機率）
+create table prize_change_log (
+  id            uuid primary key default gen_random_uuid(),
+  prize_id      uuid references prizes(id),
+  changed_by    uuid,
+  before        jsonb,
+  after         jsonb,
   created_at    timestamptz default now()
+);
+create index on prize_change_log (created_at desc);
+
+-- 使用者
+create table users (
+  id            uuid primary key default gen_random_uuid(),
+  line_user_id  text unique,
+  email         text unique,
+  display_name  text,
+  avatar_url    text,
+  created_at    timestamptz default now(),
+  last_visit_at timestamptz,
+  visit_count   int default 0,
+  is_blocked    boolean default false
 );
 
 -- 抽獎序號（紙卡 + 動態 QR 共用）
@@ -298,7 +379,8 @@ create table draw_tokens (
   issued_at     timestamptz,
   expires_at    timestamptz,
   drawn_at      timestamptz,                -- 抽獎時間
-  prize_id      uuid references prizes(id), -- 抽中什麼（未領取前先存這裡）
+  prize_id      uuid references prizes(id), -- 抽中什麼（報表分組用）
+  prize_snapshot jsonb,                     -- 中獎當下的獎項完整內容（見 §6.0 原則二）
   claimed_by    uuid references users(id),  -- 誰領走的
   claimed_at    timestamptz,
   ip_hash       text,                       -- 防刷用
@@ -321,14 +403,29 @@ create table token_batches (
 create table coupons (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid references users(id) not null,
-  prize_id      uuid references prizes(id) not null,
   token_id      uuid references draw_tokens(id) unique not null,
   redeem_code   text unique not null,       -- 6 位數字，店員輸入用
+
+  -- 報表分組用（顯示一律不看這個）
+  prize_id      uuid references prizes(id) not null,
+
+  -- 中獎當下的快照。後台改獎項不影響已發出的券
+  prize_name    text not null,
+  prize_type    text not null,
+  face_value    int  not null,
+  cost_at_draw  int  not null,              -- 當時成本，報表用
+  discount_amt  int,
+  min_spend     int  default 0,
+  max_discount  int,
+  terms         text,
+  image_url     text,
+
   status        text not null default 'active',
                 -- 'active' | 'used' | 'expired' | 'voided'
   expires_at    timestamptz not null,
   used_at       timestamptz,
   used_by       uuid references staff(id),
+  void_reason   text,
   created_at    timestamptz default now()
 );
 create index on coupons (user_id, status);
