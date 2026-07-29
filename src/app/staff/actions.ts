@@ -19,9 +19,10 @@ import { getUserByWalletCode } from '@/lib/users';
 export async function loginAction(_prev: unknown, formData: FormData) {
   const staffId = String(formData.get('staffId') ?? '');
   const pin = String(formData.get('pin') ?? '');
+  const wantedRole = String(formData.get('role') ?? 'staff');
 
   if (!staffId || pin.length < 4) {
-    return { error: '請選擇店員並輸入 PIN' };
+    return { error: '請選擇人員並輸入 PIN' };
   }
 
   const result = await loginStaff(staffId, pin);
@@ -35,8 +36,14 @@ export async function loginAction(_prev: unknown, formData: FormData) {
     };
   }
 
+  // 角色在後端再驗一次。前端的頁面分流只是動線設計，
+  // 有人直接送出 owner 的 id 到店員登入頁時要擋得住
+  if (wantedRole === 'owner' && result.session.role !== 'owner') {
+    return { error: '這組帳號沒有後台權限' };
+  }
+
   await setStaffSession(result.session);
-  redirect('/staff');
+  redirect(result.session.role === 'owner' ? '/admin' : '/staff');
 }
 
 export async function logoutAction() {

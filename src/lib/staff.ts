@@ -93,14 +93,22 @@ export async function hashPin(pin: string): Promise<string> {
   return bcrypt.hash(pin, 10);
 }
 
-export async function listActiveStaff(): Promise<
-  { id: string; name: string; role: 'staff' | 'owner' }[]
-> {
-  const { data } = await db()
+/**
+ * 列出可登入的人員。
+ *
+ * 依角色分流：店員登入頁只看得到店員，老闆登入頁只看得到老闆。
+ * 這樣店員不會知道老闆帳號叫什麼，也不會誤點。
+ */
+export async function listActiveStaff(
+  role?: 'staff' | 'owner',
+): Promise<{ id: string; name: string; role: 'staff' | 'owner' }[]> {
+  let query = db()
     .from('staff')
     .select('id, name, role')
-    .eq('is_active', true)
-    .order('name');
+    .eq('is_active', true);
 
+  if (role) query = query.eq('role', role);
+
+  const { data } = await query.order('name');
   return data ?? [];
 }
