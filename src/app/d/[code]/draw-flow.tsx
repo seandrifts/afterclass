@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Button, Card, Screen } from '@/components/ui';
+import { IconAlert, IconGift, IconLine, IconSparkle } from '@/components/icons';
+import { Button, Card, Screen, Spinner } from '@/components/ui';
 import { formatForCustomer, progressToward } from '@/lib/points';
 import type { Prize, PrizeSnapshot, Settings } from '@/lib/types';
 
@@ -41,6 +42,9 @@ export function DrawFlow({
     setPhase('spinning');
     setMessage(null);
 
+    // 轉動開始的觸覺回饋。手機在吵雜的店裡，震動比音效有效
+    navigator.vibrate?.(30);
+
     try {
       const res = await fetch('/api/draw', {
         method: 'POST',
@@ -58,7 +62,10 @@ export function DrawFlow({
       setPrize(json.prize as PrizeSnapshot);
 
       // 等轉盤停下來才揭曉。結果早就決定好了，動畫只是把它演出來
-      window.setTimeout(() => setPhase('revealed'), SPIN_MS);
+      window.setTimeout(() => {
+        setPhase('revealed');
+        navigator.vibrate?.([40, 60, 120]);
+      }, SPIN_MS);
     } catch {
       setPhase('error');
       setMessage('連線不穩，請確認網路後再試一次。');
@@ -94,8 +101,7 @@ export function DrawFlow({
     }
   }, [code]);
 
-  // 已登入的人抽完就直接入帳，不需要多按一次。
-  // claimed ref 確保嚴格模式下的重複掛載不會領兩次
+  // 已登入的人抽完就直接入帳，不需要多按一次
   useEffect(() => {
     if (phase !== 'revealed' || !user || claimed.current) return;
     claimed.current = true;
@@ -106,15 +112,18 @@ export function DrawFlow({
     return (
       <Screen>
         <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <div className="text-6xl" aria-hidden>
-            😵
+          <div className="flex size-24 items-center justify-center rounded-full bg-amber-50 text-warn">
+            <IconAlert className="size-12" />
           </div>
-          <h1 className="mt-5 text-2xl font-bold">沒抽成功</h1>
-          <p className="mt-3 text-ink-soft">{message}</p>
+          <h1 className="mt-6 text-2xl font-bold">沒抽成功</h1>
+          <p className="mt-3 text-pretty text-ink-soft">{message}</p>
         </div>
       </Screen>
     );
   }
+
+  const revealed = phase !== 'idle' && phase !== 'spinning';
+  const isBigWin = prize ? isBig(prize, prizes) : false;
 
   return (
     <Screen>
@@ -122,9 +131,9 @@ export function DrawFlow({
         <p className="text-sm font-medium text-brand-600">
           {settings.shop_name || '消費抽獎'}
         </p>
-        <h1 className="mt-1 text-3xl font-black tracking-tight">
+        <h1 className="mt-1 text-3xl font-black tracking-tight text-balance">
           {phase === 'idle' ? '來抽一次吧' : null}
-          {phase === 'spinning' ? '抽獎中⋯' : null}
+          {phase === 'spinning' ? '抽獎中' : null}
           {phase === 'revealed' || phase === 'claiming' ? '恭喜！' : null}
           {phase === 'claimed' ? '已存進你的帳戶' : null}
         </h1>
@@ -134,12 +143,14 @@ export function DrawFlow({
         prizes={prizes}
         target={prize}
         spinning={phase === 'spinning'}
-        revealed={phase !== 'idle' && phase !== 'spinning'}
+        revealed={revealed}
+        celebrate={revealed && isBigWin}
       />
 
       {phase === 'idle' ? (
         <div className="mt-8">
           <Button size="lg" onClick={draw}>
+            <IconSparkle className="size-6" />
             開始抽獎
           </Button>
           <p className="mt-4 text-center text-sm text-ink-faint">
@@ -148,8 +159,17 @@ export function DrawFlow({
         </div>
       ) : null}
 
-      {(phase === 'revealed' || phase === 'claiming' || phase === 'claimed') &&
-      prize ? (
+      {phase === 'spinning' ? (
+        <p
+          className="mt-8 text-center text-ink-soft"
+          role="status"
+          aria-live="polite"
+        >
+          結果揭曉中
+        </p>
+      ) : null}
+
+      {revealed && prize ? (
         <Outcome
           prize={prize}
           settings={settings}
@@ -157,10 +177,28 @@ export function DrawFlow({
           balance={balance}
           phase={phase}
           code={code}
+          isBigWin={isBigWin}
         />
       ) : null}
     </Screen>
   );
+}
+
+/**
+ * 大獎判定。
+ *
+ * 用「面額是否在前三分之一」而不是寫死某個獎項名稱，這樣老闆在
+ * 後台調整獎項之後，慶祝效果會自動跟著新的獎項結構走。
+ */
+function isBig(prize: PrizeSnapshot, prizes: Prize[]): boolean {
+  const values = prizes
+    .filter((p) => p.weight > 0)
+    .map((p) => p.face_value)
+    .sort((a, b) => b - a);
+
+  if (values.length === 0) return false;
+  const threshold = values[Math.floor(values.length / 3)] ?? values[0];
+  return prize.face_value >= threshold && values.length > 1;
 }
 
 /**
@@ -174,11 +212,13 @@ function Reel({
   target,
   spinning,
   revealed,
+  celebrate,
 }: {
   prizes: Prize[];
   target: PrizeSnapshot | null;
   spinning: boolean;
   revealed: boolean;
+  celebrate: boolean;
 }) {
   const itemHeight = 88;
   const targetIndex = target
@@ -186,7 +226,6 @@ function Reel({
     : 0;
   const landing = targetIndex >= 0 ? targetIndex : 0;
 
-  // 轉滿幾圈再停在目標項目上
   const offset =
     spinning || revealed
       ? (REEL_LOOPS * prizes.length + landing) * itemHeight
@@ -195,40 +234,86 @@ function Reel({
   const loops = Array.from({ length: REEL_LOOPS + 2 }, (_, i) => i);
 
   return (
-    <div
-      className="relative overflow-hidden rounded-card border-4 border-brand-500 bg-raised shadow-lg"
-      style={{ height: itemHeight }}
-      aria-live="polite"
-      aria-label={revealed && target ? `抽中 ${target.name}` : '抽獎轉盤'}
-    >
-      <div
-        className="will-change-transform"
-        style={{
-          transform: `translateY(-${offset}px)`,
-          transition: spinning
-            ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.18, 1)`
-            : 'none',
-        }}
-      >
-        {loops.map((loop) =>
-          prizes.map((p) => (
-            <div
-              key={`${loop}-${p.id}`}
-              className="flex items-center justify-center gap-2 font-black"
-              style={{ height: itemHeight, color: p.color ?? undefined }}
-            >
-              <span className="text-2xl">{p.name}</span>
-            </div>
-          )),
-        )}
-      </div>
+    <div className="relative">
+      {celebrate ? <Confetti /> : null}
 
-      {/* 沒抽之前遮一層，避免客人先看到獎項排列去猜順序 */}
-      {!spinning && !revealed ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-brand-50">
-          <span className="text-3xl font-black text-brand-500">🎁 ? ? ?</span>
+      <div
+        className={`relative overflow-hidden rounded-card border-4 bg-raised shadow-lg transition-colors duration-500 ${
+          celebrate ? 'border-amber-400' : 'border-brand-500'
+        }`}
+        style={{ height: itemHeight }}
+        aria-live="polite"
+        aria-label={revealed && target ? `抽中 ${target.name}` : '抽獎轉盤'}
+      >
+        <div
+          className="will-change-transform"
+          style={{
+            transform: `translateY(-${offset}px)`,
+            transition: spinning
+              ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.18, 1)`
+              : 'none',
+          }}
+        >
+          {loops.map((loop) =>
+            prizes.map((p) => (
+              <div
+                key={`${loop}-${p.id}`}
+                className="flex items-center justify-center gap-2 font-black"
+                style={{ height: itemHeight, color: p.color ?? undefined }}
+              >
+                <span className="text-2xl">{p.name}</span>
+              </div>
+            )),
+          )}
         </div>
-      ) : null}
+
+        {/* 沒抽之前遮一層，避免客人先看到獎項排列去猜順序 */}
+        {!spinning && !revealed ? (
+          <div className="absolute inset-0 flex items-center justify-center gap-3 bg-brand-50">
+            <IconGift className="size-9 text-brand-500" />
+            <span className="text-3xl font-black tracking-[0.2em] text-brand-500">
+              ???
+            </span>
+          </div>
+        ) : null}
+
+        {/* 轉動時上下加陰影，強化「正在滾動」的視覺 */}
+        {spinning ? (
+          <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-black/15 via-transparent to-black/15" />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 大獎的紙屑效果。
+ *
+ * 純 CSS，不引入動畫函式庫。12 片就夠營造氣氛，數量再多在舊手機上
+ * 會掉幀，反而顯得廉價。
+ *
+ * prefers-reduced-motion 由 globals.css 的全域規則接管，會退化成靜止。
+ */
+function Confetti() {
+  const pieces = Array.from({ length: 12 }, (_, i) => i);
+  const colors = ['#E4572E', '#F4A261', '#E9C46A', '#2A9D8F', '#F77F00'];
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 -top-8 z-10 h-32 overflow-hidden"
+      aria-hidden="true"
+    >
+      {pieces.map((i) => (
+        <span
+          key={i}
+          className="absolute block size-2.5 rounded-[2px] animate-[confetti_1.4s_ease-out_forwards]"
+          style={{
+            left: `${(i * 8.5 + 4) % 100}%`,
+            background: colors[i % colors.length],
+            animationDelay: `${(i % 5) * 90}ms`,
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -240,6 +325,7 @@ function Outcome({
   balance,
   phase,
   code,
+  isBigWin,
 }: {
   prize: PrizeSnapshot;
   settings: Settings;
@@ -247,18 +333,28 @@ function Outcome({
   balance: number | null;
   phase: Phase;
   code: string;
+  isBigWin: boolean;
 }) {
   const isCredit = prize.type === 'credit';
   const amount = prize.credit_amount ?? 0;
 
-  const shown = balance ?? user?.balance ?? 0;
+  const before = user?.balance ?? 0;
+  const shown = balance ?? before;
   const progress = progressToward(shown, settings);
 
   return (
     <div className="mt-8 space-y-5">
-      <Card className="text-center">
+      <Card
+        className={`text-center transition-colors duration-500 ${
+          isBigWin ? 'border-amber-400 bg-amber-50' : ''
+        }`}
+      >
         <p className="text-sm text-ink-soft">你抽中了</p>
-        <p className="mt-2 text-4xl font-black text-brand-600">
+        <p
+          className={`mt-2 text-4xl font-black text-balance ${
+            isBigWin ? 'text-amber-600' : 'text-brand-600'
+          }`}
+        >
           {isCredit ? `+${formatForCustomer(amount, settings)}` : prize.name}
         </p>
         {!isCredit ? (
@@ -266,27 +362,49 @@ function Outcome({
             價值 {prize.face_value} 元
           </p>
         ) : null}
+        {isBigWin ? (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-400/20 px-3 py-1 text-sm font-bold text-amber-700">
+            <IconSparkle className="size-4" />
+            大獎
+          </p>
+        ) : null}
       </Card>
+
+      {phase === 'claiming' ? (
+        <div className="flex items-center justify-center gap-2 text-ink-soft">
+          <Spinner />
+          存入中
+        </div>
+      ) : null}
 
       {phase === 'claimed' && isCredit ? (
         <Card>
           <div className="flex items-baseline justify-between">
             <span className="text-sm text-ink-soft">目前累積</span>
-            <span className="tabular text-3xl font-black text-ink">
-              {formatForCustomer(shown, settings)}
-            </span>
+            <CountUp
+              from={before * settings.points_per_dollar}
+              to={shown * settings.points_per_dollar}
+              suffix={settings.points_display_enabled ? ' 點' : ' 元'}
+            />
           </div>
           <p className="mt-1 text-right text-sm text-ink-soft">
             可折抵 {shown} 元
           </p>
 
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-brand-100">
+          <div
+            className="mt-4 h-3 overflow-hidden rounded-full bg-brand-100"
+            role="progressbar"
+            aria-valuenow={Math.round(progress.ratio * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="距離單次折抵上限的進度"
+          >
             <div
-              className="h-full rounded-full bg-brand-500 transition-[width] duration-700"
+              className="h-full rounded-full bg-brand-500 transition-[width] duration-1000 ease-out"
               style={{ width: `${progress.ratio * 100}%` }}
             />
           </div>
-          <p className="mt-2 text-center text-sm font-medium text-ink-soft">
+          <p className="mt-2 text-center text-sm font-medium text-pretty text-ink-soft">
             {progress.reached
               ? `已達單次折抵上限，來店即可折抵 ${progress.target} 元`
               : `再 ${formatForCustomer(progress.remaining, settings)} 達單次折抵上限`}
@@ -294,19 +412,16 @@ function Outcome({
         </Card>
       ) : null}
 
-      {phase === 'claiming' ? (
-        <p className="text-center text-ink-soft">存入中⋯</p>
-      ) : null}
-
       {!user ? (
         <div className="space-y-3">
           <a
             href={`/auth/line?next=${encodeURIComponent(`/d/${code}`)}`}
-            className="flex min-h-16 w-full items-center justify-center rounded-2xl bg-[#06C755] text-xl font-bold text-white shadow-md active:scale-[0.98]"
+            className="flex min-h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[#06C755] text-xl font-bold text-white shadow-md transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#06C755]/40"
           >
+            <IconLine className="size-7" />
             用 LINE 登入領取
           </a>
-          <p className="text-center text-sm text-ink-faint">
+          <p className="text-center text-sm text-pretty text-ink-faint">
             需在 {settings.claim_window_minutes} 分鐘內登入，逾時視為放棄
           </p>
         </div>
@@ -315,12 +430,59 @@ function Outcome({
       {phase === 'claimed' ? (
         <a
           href="/wallet"
-          className="block text-center text-base font-medium text-brand-600 underline"
+          className="block cursor-pointer rounded text-center text-base font-medium text-brand-600 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
         >
           查看我的點數
         </a>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * 數字累加動畫。
+ *
+ * 「470 變成 500」這個過程要看得見。累積感是儲值金機制的全部價值，
+ * 直接顯示終值等於把最有感的那一秒丟掉。
+ */
+function CountUp({
+  from,
+  to,
+  suffix,
+}: {
+  from: number;
+  to: number;
+  suffix: string;
+}) {
+  const [value, setValue] = useState(from);
+
+  useEffect(() => {
+    // 所有的 setState 都在 rAF 的 callback 裡，不在 effect 本體。
+    // 在 effect 本體直接 setState 會造成串聯重繪
+    const reduced =
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+    const duration = reduced || from === to ? 0 : 900;
+    const start = performance.now();
+    let raf = 0;
+
+    const tick = (now: number) => {
+      const t = duration === 0 ? 1 : Math.min(1, (now - start) / duration);
+      // ease-out：一開始快，接近終值時慢下來
+      const eased = 1 - (1 - t) ** 3;
+      setValue(Math.round(from + (to - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [from, to]);
+
+  return (
+    <span className="tabular text-3xl font-black text-ink">
+      {value}
+      <span className="text-lg">{suffix}</span>
+    </span>
   );
 }
 

@@ -44,6 +44,29 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 大獎的紙屑。純 CSS，不為了這個效果引入動畫函式庫 */
+@keyframes confetti {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(140px) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+/* 骨架屏的呼吸節奏，比 Tailwind 預設的 animate-pulse 柔和一點 */
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

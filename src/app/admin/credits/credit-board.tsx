@@ -33,11 +33,12 @@ export function CreditBoard({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-black">點數管理</h1>
         <Button
           type="button"
-          className="w-auto px-5"
+          className="sm:w-auto sm:px-5"
+          size="sm"
           onClick={() => setAdjusting((v) => !v)}
         >
           {adjusting ? '收起' : '人工調整'}
@@ -80,8 +81,61 @@ export function CreditBoard({
 
       <section>
         <h2 className="mb-3 text-sm font-bold text-ink-soft">流水帳</h2>
-        <div className="overflow-x-auto rounded-card border border-line bg-raised">
-          <table className="w-full min-w-[680px] text-sm">
+
+        {/* 手機：卡片。表格橫向捲動會讓「金額」跟「異動後」看不到 */}
+        <ul className="space-y-2 md:hidden">
+          {ledger.map((row) => (
+            <li
+              key={row.id}
+              className="rounded-card border border-line bg-raised p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-bold">
+                    {row.users?.display_name ?? '—'}
+                  </p>
+                  <p className="mt-0.5 font-mono text-xs text-ink-faint">
+                    {row.users?.wallet_code}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p
+                    className={`tabular text-lg font-bold ${
+                      row.amount > 0 ? 'text-good' : 'text-ink'
+                    }`}
+                  >
+                    {row.amount > 0 ? '+' : ''}
+                    {row.amount}
+                  </p>
+                  <p className="tabular text-xs text-ink-faint">
+                    餘 {row.balance_after}
+                  </p>
+                </div>
+              </div>
+
+              <p className="mt-2 text-xs text-ink-soft">
+                {TYPE_LABELS[row.type] ?? row.type}
+                {' · '}
+                {new Date(row.created_at).toLocaleString('zh-TW', {
+                  month: 'numeric',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+                {row.staff?.name ? ` · ${row.staff.name}` : ''}
+                {row.note ? ` · ${row.note}` : ''}
+              </p>
+            </li>
+          ))}
+          {ledger.length === 0 ? (
+            <li className="rounded-card border border-line bg-raised py-10 text-center text-sm text-ink-soft">
+              還沒有任何流水紀錄
+            </li>
+          ) : null}
+        </ul>
+
+        <div className="hidden overflow-x-auto rounded-card border border-line bg-raised md:block">
+          <table className="w-full text-sm">
             <thead className="border-b border-line text-left text-xs text-ink-soft">
               <tr>
                 <th className="px-4 py-3">時間</th>
@@ -185,7 +239,7 @@ function AdjustForm() {
               name="walletCode"
               required
               autoCapitalize="characters"
-              className="mt-1 w-full rounded-xl border border-line px-3 py-2 uppercase"
+              className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 mt-1 w-full rounded-xl border border-line px-3 py-2 uppercase"
             />
           </label>
 
@@ -193,7 +247,7 @@ function AdjustForm() {
             <span className="text-sm font-bold text-ink-soft">方向</span>
             <select
               name="direction"
-              className="mt-1 w-full rounded-xl border border-line px-3 py-2"
+              className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 mt-1 w-full rounded-xl border border-line px-3 py-2"
             >
               <option value="add">增加</option>
               <option value="subtract">扣除</option>
@@ -208,7 +262,7 @@ function AdjustForm() {
             type="number"
             min={1}
             required
-            className="tabular mt-1 w-full rounded-xl border border-line px-3 py-2"
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 tabular mt-1 w-full rounded-xl border border-line px-3 py-2"
           />
         </label>
 
@@ -220,7 +274,7 @@ function AdjustForm() {
             name="note"
             required
             placeholder="店員誤扣，補回"
-            className="mt-1 w-full rounded-xl border border-line px-3 py-2"
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 mt-1 w-full rounded-xl border border-line px-3 py-2"
           />
         </label>
 

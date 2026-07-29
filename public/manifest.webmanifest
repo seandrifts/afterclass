@@ -1,0 +1,22 @@
+{
+  "name": "消費抽獎",
+  "short_name": "抽獎",
+  "description": "來店消費即可抽獎，回饋點數累積折抵",
+  "start_url": "/wallet",
+  "display": "standalone",
+  "background_color": "#FFFBF7",
+  "theme_color": "#E4572E",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -179,7 +179,7 @@ function Toggles({ settings }: { settings: Settings }) {
           <button
             type="submit"
             disabled={pending}
-            className={`min-h-10 rounded-xl px-5 text-sm font-bold ${
+            className={`cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 min-h-10 rounded-xl px-5 text-sm font-bold ${
               settings.push_enabled
                 ? 'bg-good text-white'
                 : 'border border-line bg-raised text-ink-soft'
@@ -205,7 +205,7 @@ function Toggles({ settings }: { settings: Settings }) {
           <button
             type="submit"
             disabled={pending}
-            className={`min-h-10 rounded-xl px-5 text-sm font-bold ${
+            className={`cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 min-h-10 rounded-xl px-5 text-sm font-bold ${
               settings.push_expiry_enabled
                 ? 'bg-good text-white'
                 : 'border border-line bg-raised text-ink-soft'
@@ -326,13 +326,13 @@ function TestPush() {
             required
             autoCapitalize="characters"
             placeholder="你自己的錢包碼"
-            className="mt-1 w-full rounded-xl border border-line px-3 py-2 uppercase"
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 mt-1 w-full rounded-xl border border-line px-3 py-2 uppercase"
           />
         </label>
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl border border-line px-5 py-2.5 text-sm font-bold"
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl border border-line px-5 py-2.5 text-sm font-bold"
         >
           {pending ? '推送中⋯' : '試推'}
         </button>

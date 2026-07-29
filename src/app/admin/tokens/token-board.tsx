@@ -17,11 +17,12 @@ export function TokenBoard({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-black">序號管理</h1>
         <Button
           type="button"
-          className="w-auto px-5"
+          className="sm:w-auto sm:px-5"
+          size="sm"
           onClick={() => setCreating((v) => !v)}
         >
           {creating ? '收起' : '產生新批次'}
@@ -59,7 +60,7 @@ function CreateForm({ validDays }: { validDays: number }) {
             name="name"
             required
             placeholder="2026-08 第一批"
-            className="mt-1 w-full rounded-xl border border-line px-3 py-2"
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 mt-1 w-full rounded-xl border border-line px-3 py-2"
           />
         </label>
 
@@ -72,7 +73,7 @@ function CreateForm({ validDays }: { validDays: number }) {
             max={5000}
             defaultValue={200}
             required
-            className="mt-1 w-full rounded-xl border border-line px-3 py-2"
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 mt-1 w-full rounded-xl border border-line px-3 py-2"
           />
         </label>
 
@@ -81,7 +82,7 @@ function CreateForm({ validDays }: { validDays: number }) {
           <input
             name="note"
             placeholder="印在名片卡"
-            className="mt-1 w-full rounded-xl border border-line px-3 py-2"
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 mt-1 w-full rounded-xl border border-line px-3 py-2"
           />
         </label>
 
@@ -134,20 +135,20 @@ function BatchCard({ batch }: { batch: BatchRow }) {
             type="number"
             min={1}
             defaultValue={100}
-            className="tabular mt-1 w-24 rounded-xl border border-line px-3 py-2"
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 tabular mt-1 w-24 rounded-xl border border-line px-3 py-2"
           />
         </label>
         <button
           type="submit"
           disabled={pending || batch.counts.inactive === 0}
-          className="rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
         >
           {pending ? '啟用中⋯' : '啟用'}
         </button>
 
         <a
           href={`/api/admin/tokens/${batch.id}/print`}
-          className="rounded-xl border border-line px-5 py-2.5 text-sm font-bold"
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl border border-line px-5 py-2.5 text-sm font-bold"
         >
           下載列印清單
         </a>

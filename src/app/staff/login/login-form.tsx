@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import { loginAction } from '../actions';
+import { IconBackspace } from '@/components/icons';
 import { Button, Card } from '@/components/ui';
 
 export function LoginForm({
@@ -32,7 +33,7 @@ export function LoginForm({
             key={s.id}
             type="button"
             onClick={() => setSelected(s.id)}
-            className={`min-h-16 rounded-2xl border-2 text-lg font-bold transition ${
+            className={`min-h-16 cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-2xl border-2 text-lg font-bold ${
               selected === s.id
                 ? 'border-brand-500 bg-brand-50 text-brand-700'
                 : 'border-line bg-raised text-ink-soft'
@@ -80,7 +81,7 @@ function Keypad({
   value: string;
   onChange: (next: string) => void;
 }) {
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
 
   return (
     <div className="grid grid-cols-3 gap-2">
@@ -92,12 +93,17 @@ function Keypad({
             key={i}
             type="button"
             onClick={() => {
-              if (k === '⌫') onChange(value.slice(0, -1));
+              if (k === 'del') onChange(value.slice(0, -1));
               else if (value.length < 6) onChange(value + k);
             }}
-            className="min-h-16 rounded-2xl border border-line bg-raised text-2xl font-bold active:bg-brand-50"
+            className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 min-h-16 rounded-2xl border border-line bg-raised text-2xl font-bold active:bg-brand-50"
+            aria-label={k === 'del' ? '刪除' : k}
           >
-            {k}
+            {k === 'del' ? (
+              <IconBackspace className="mx-auto size-7" />
+            ) : (
+              k
+            )}
           </button>
         ),
       )}

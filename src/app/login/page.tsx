@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { getSettings } from '@/lib/settings';
 import { getUserSession } from '@/lib/session';
+import { IconBowl, IconLine } from '@/components/icons';
 import { Card, Screen } from '@/components/ui';
 
 const ERRORS: Record<string, string> = {
@@ -29,8 +30,8 @@ export default async function LoginPage(props: PageProps<'/login'>) {
     <Screen>
       <div className="flex flex-1 flex-col justify-center">
         <div className="text-center">
-          <div className="text-5xl" aria-hidden>
-            🍜
+          <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-brand-50 text-brand-500">
+            <IconBowl className="size-10" />
           </div>
           <h1 className="mt-4 text-2xl font-black">
             {settings.shop_name || '消費抽獎'}
@@ -39,7 +40,7 @@ export default async function LoginPage(props: PageProps<'/login'>) {
         </div>
 
         {errorKey ? (
-          <p className="mt-6 rounded-2xl bg-red-50 px-4 py-3 text-center text-sm text-bad">
+          <p role="alert" className="mt-6 rounded-2xl bg-red-50 px-4 py-3 text-center text-sm text-pretty text-bad">
             {ERRORS[errorKey] ?? '登入失敗，請再試一次。'}
           </p>
         ) : null}
@@ -47,8 +48,9 @@ export default async function LoginPage(props: PageProps<'/login'>) {
         <div className="mt-8">
           <a
             href={`/auth/line?next=${encodeURIComponent(next)}`}
-            className="flex min-h-16 w-full items-center justify-center rounded-2xl bg-[#06C755] text-xl font-bold text-white shadow-md active:scale-[0.98]"
+            className="flex min-h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[#06C755] text-xl font-bold text-white shadow-md transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#06C755]/40"
           >
+            <IconLine className="size-7" />
             用 LINE 登入
           </a>
         </div>

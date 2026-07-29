@@ -10,6 +10,12 @@ import {
   redeemCouponAction,
   undoAction,
 } from './actions';
+import {
+  IconCamera,
+  IconCheck,
+  IconUndo,
+} from '@/components/icons';
+import { ScanInput } from '@/components/qr-scanner';
 import { Button, Card } from '@/components/ui';
 
 type Tab = 'redeem' | 'coupon' | 'issue';
@@ -52,7 +58,7 @@ export function StaffPanel({
             </a>
           ) : null}
           <form action={logoutAction}>
-            <button type="submit" className="text-sm text-ink-faint underline">
+            <button type="submit" className="cursor-pointer rounded text-sm text-ink-faint underline transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300">
               登出
             </button>
           </form>
@@ -119,7 +125,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`min-h-12 rounded-xl text-base font-bold transition ${
+      className={`min-h-12 cursor-pointer rounded-xl text-base font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 ${
         active
           ? 'bg-brand-500 text-white'
           : 'border border-line bg-raised text-ink-soft'
@@ -145,9 +151,7 @@ function RedeemTab() {
   if (success && !undo?.undone) {
     return (
       <div className="rounded-card bg-good p-8 text-center text-white">
-        <p className="text-5xl" aria-hidden>
-          ✓
-        </p>
+        <IconCheck className="mx-auto size-16" />
         <p className="mt-4 text-3xl font-black">已折抵 {success.amount} 元</p>
         <p className="mt-2 text-xl">剩餘 {success.newBalance} 元</p>
         {success.replayed ? (
@@ -170,7 +174,7 @@ function RedeemTab() {
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="min-h-14 w-full rounded-xl bg-white text-lg font-black text-good"
+            className="min-h-14 w-full cursor-pointer rounded-xl bg-white text-lg font-black text-good transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/50"
           >
             下一位
           </button>
@@ -186,14 +190,12 @@ function RedeemTab() {
   if (undo?.undone) {
     return (
       <div className="rounded-card bg-warn p-8 text-center text-white">
-        <p className="text-4xl" aria-hidden>
-          ↩
-        </p>
+        <IconUndo className="mx-auto size-14" />
         <p className="mt-4 text-2xl font-black">已撤銷，金額退回客人帳戶</p>
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="mt-8 min-h-14 w-full rounded-xl bg-white text-lg font-black text-warn"
+          className="mt-8 min-h-14 w-full cursor-pointer rounded-xl bg-white text-lg font-black text-warn transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/50"
         >
           回到折抵
         </button>
@@ -205,29 +207,21 @@ function RedeemTab() {
     return (
       <form action={lookupFn} className="space-y-4">
         <Card>
-          <label
-            htmlFor="walletCode"
-            className="text-sm font-bold text-ink-soft"
-          >
-            會員碼
-          </label>
-          <input
-            id="walletCode"
+          <ScanInput
             name="walletCode"
-            autoFocus
-            autoComplete="off"
-            autoCapitalize="characters"
-            placeholder="請客人出示錢包畫面"
-            className="tabular mt-2 w-full rounded-xl border-2 border-line px-4 py-4 text-center text-2xl font-bold tracking-widest uppercase focus:border-brand-500 focus:outline-none"
+            label="會員碼"
+            placeholder="掃描或輸入"
           />
         </Card>
 
         {lookup && 'error' in lookup && lookup.error ? (
-          <p className="text-center font-medium text-bad">{lookup.error}</p>
+          <p role="alert" className="text-center font-medium text-bad">
+            {lookup.error}
+          </p>
         ) : null}
 
-        <Button type="submit" size="lg" disabled={looking}>
-          {looking ? '查詢中⋯' : '查詢餘額'}
+        <Button type="submit" size="lg" loading={looking}>
+          {looking ? '查詢中' : '查詢餘額'}
         </Button>
       </form>
     );
@@ -297,7 +291,7 @@ function RedeemForm({
               key={v}
               type="button"
               onClick={() => setAmount(v)}
-              className={`min-h-14 rounded-xl border-2 text-lg font-bold ${
+              className={`min-h-14 cursor-pointer rounded-xl border-2 text-lg font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 ${
                 amount === v
                   ? 'border-brand-500 bg-brand-50 text-brand-700'
                   : 'border-line bg-raised'
@@ -309,7 +303,7 @@ function RedeemForm({
           <button
             type="button"
             onClick={() => setAmount(usable)}
-            className={`min-h-14 rounded-xl border-2 text-lg font-bold ${
+            className={`min-h-14 cursor-pointer rounded-xl border-2 text-lg font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 ${
               amount === usable
                 ? 'border-brand-500 bg-brand-50 text-brand-700'
                 : 'border-line bg-raised'
@@ -342,7 +336,7 @@ function RedeemForm({
           <button
             type="button"
             onClick={() => setConfirmRepeat(false)}
-            className="mt-3 w-full text-center text-sm text-ink-faint underline"
+            className="mt-3 w-full cursor-pointer rounded text-center text-sm text-ink-faint underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
           >
             取消
           </button>
@@ -363,9 +357,7 @@ function CouponTab() {
   if (success) {
     return (
       <div className="rounded-card bg-good p-8 text-center text-white">
-        <p className="text-5xl" aria-hidden>
-          ✓
-        </p>
+        <IconCheck className="mx-auto size-16" />
         <p className="mt-4 text-3xl font-black">{success.prizeName}</p>
         <p className="mt-2 text-lg">核銷成功</p>
         <button
@@ -382,25 +374,23 @@ function CouponTab() {
   return (
     <form action={action} className="space-y-4">
       <Card>
-        <label htmlFor="redeemCode" className="text-sm font-bold text-ink-soft">
-          核銷碼（6 位數字）
-        </label>
-        <input
-          id="redeemCode"
+        <ScanInput
           name="redeemCode"
-          inputMode="numeric"
+          label="核銷碼（6 位數字）"
+          placeholder="掃描或輸入"
+          numeric
           maxLength={6}
-          autoComplete="off"
-          className="tabular mt-2 w-full rounded-xl border-2 border-line px-4 py-4 text-center text-3xl font-black tracking-[0.3em] focus:border-brand-500 focus:outline-none"
         />
       </Card>
 
       {state && 'error' in state && state.error ? (
-        <p className="text-center font-medium text-bad">{state.error}</p>
+        <p role="alert" className="text-center font-medium text-bad">
+          {state.error}
+        </p>
       ) : null}
 
-      <Button type="submit" size="lg" disabled={pending}>
-        {pending ? '核銷中⋯' : '核銷'}
+      <Button type="submit" size="lg" loading={pending}>
+        {pending ? '核銷中' : '核銷'}
       </Button>
     </form>
   );
@@ -484,8 +474,9 @@ function IssueTab() {
       {error ? (
         <p className="text-center font-medium text-bad">{error}</p>
       ) : null}
-      <Button size="lg" onClick={issue} disabled={busy}>
-        {busy ? '產生中⋯' : '產生抽獎 QR'}
+      <Button size="lg" onClick={issue} loading={busy}>
+        <IconCamera className="size-5" />
+        {busy ? '產生中' : '產生抽獎 QR'}
       </Button>
     </div>
   );

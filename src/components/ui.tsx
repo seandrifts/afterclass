@@ -25,12 +25,23 @@ export function Screen({ children }: { children: ReactNode }) {
   );
 }
 
-const buttonBase =
-  'inline-flex w-full items-center justify-center rounded-2xl px-6 text-lg font-bold ' +
-  'transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
+/**
+ * 所有可點擊元素共用的基底。
+ *
+ * cursor-pointer 跟 focus-visible 寫在這裡而不是各自散落，是因為
+ * 這兩項最容易在新增元件時被漏掉。焦點環用 focus-visible 而非 focus，
+ * 這樣滑鼠點擊不會留下一圈框，只有鍵盤操作時才顯示。
+ */
+const interactive =
+  'cursor-pointer transition-colors duration-200 ' +
+  'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 ' +
+  'disabled:cursor-not-allowed disabled:opacity-40';
+
+const buttonBase = `inline-flex w-full items-center justify-center gap-2 rounded-2xl px-6 text-lg font-bold active:scale-[0.98] ${interactive}`;
 
 // 觸控目標最小 56px。店員手濕、動作快，按鈕小了就會誤觸
 const buttonSizes = {
+  sm: 'min-h-11 text-base px-4',
   md: 'min-h-14',
   lg: 'min-h-16 text-xl',
 } as const;
@@ -45,19 +56,28 @@ const buttonVariants = {
 type ButtonProps = ComponentProps<'button'> & {
   variant?: keyof typeof buttonVariants;
   size?: keyof typeof buttonSizes;
+  loading?: boolean;
 };
 
 export function Button({
   variant = 'primary',
   size = 'md',
   className = '',
+  loading = false,
+  disabled,
+  children,
   ...props
 }: ButtonProps) {
   return (
     <button
       {...props}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       className={`${buttonBase} ${buttonSizes[size]} ${buttonVariants[variant]} ${className}`}
-    />
+    >
+      {loading ? <Spinner /> : null}
+      {children}
+    </button>
   );
 }
 
@@ -84,6 +104,62 @@ export function LinkButton({
   );
 }
 
+/** 純文字連結，同樣要有焦點環 */
+export function TextLink({
+  href,
+  className = '',
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`rounded underline underline-offset-2 ${interactive} hover:text-brand-600 ${className}`}
+    >
+      {children}
+    </Link>
+  );
+}
+
+export function Spinner({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      className={`size-5 animate-spin ${className}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeWidth="3"
+        className="opacity-25"
+      />
+      <path
+        d="M12 3a9 9 0 0 1 9 9"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** 骨架屏的單一區塊。載入時先佔住位置，避免內容跳動 */
+export function Skeleton({ className = '' }: { className?: string }) {
+  return (
+    <div
+      className={`animate-pulse rounded-xl bg-brand-100/60 ${className}`}
+      aria-hidden="true"
+    />
+  );
+}
+
 /**
  * 錯誤狀態畫面。
  *
@@ -92,25 +168,38 @@ export function LinkButton({
  * 前者他知道要去問店家，後者只會讓他放棄。
  */
 export function StatusScreen({
-  emoji,
+  icon,
+  tone = 'neutral',
   title,
   detail,
   action,
 }: {
-  emoji: string;
+  icon: ReactNode;
+  tone?: 'neutral' | 'good' | 'warn' | 'bad';
   title: string;
   detail?: ReactNode;
   action?: ReactNode;
 }) {
+  const tones = {
+    neutral: 'bg-brand-50 text-brand-500',
+    good: 'bg-green-50 text-good',
+    warn: 'bg-amber-50 text-warn',
+    bad: 'bg-red-50 text-bad',
+  } as const;
+
   return (
     <Screen>
       <div className="flex flex-1 flex-col items-center justify-center text-center">
-        <div className="text-6xl" aria-hidden>
-          {emoji}
+        <div
+          className={`flex size-24 items-center justify-center rounded-full ${tones[tone]}`}
+        >
+          {icon}
         </div>
-        <h1 className="mt-5 text-2xl font-bold text-ink">{title}</h1>
+        <h1 className="mt-6 text-2xl font-bold text-balance text-ink">
+          {title}
+        </h1>
         {detail ? (
-          <p className="mt-3 text-base leading-relaxed text-ink-soft">
+          <p className="mt-3 text-base leading-relaxed text-pretty text-ink-soft">
             {detail}
           </p>
         ) : null}

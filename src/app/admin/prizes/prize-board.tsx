@@ -64,10 +64,12 @@ export function PrizeBoard({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* 窄螢幕時標題與按鈕堆疊，不然中文標題會被按鈕壓到 */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-black">獎項管理</h1>
         <Button
-          className="w-auto px-5"
+          className="sm:w-auto sm:px-5"
+          size="sm"
           onClick={() => setEditing('new')}
           type="button"
         >
@@ -75,8 +77,93 @@ export function PrizeBoard({
         </Button>
       </div>
 
-      <div className="overflow-x-auto rounded-card border border-line bg-raised">
-        <table className="w-full min-w-[720px] text-sm">
+      {/*
+        手機用卡片，桌機用表格。
+
+        原本讓表格橫向捲動，結果權重、機率、期望成本三欄全在畫面外。
+        老闆站在店裡用手機調機率時，最重要的三個數字反而看不到。
+      */}
+      <ul className="space-y-3 lg:hidden">
+        {rows.map((p) => {
+          const prob =
+            totalWeight > 0 && p.is_active && p.weight > 0
+              ? (p.weight / totalWeight) * 100
+              : 0;
+          const exp = (prob / 100) * p.cost;
+
+          return (
+            <li
+              key={p.id}
+              className={`rounded-card border border-line bg-raised p-4 ${
+                p.is_active ? '' : 'opacity-50'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 font-bold">
+                    <span
+                      className="inline-block size-3 shrink-0 rounded-full"
+                      style={{ background: p.color ?? '#ccc' }}
+                    />
+                    <span className="truncate">{p.name}</span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-soft">
+                    {TYPE_LABELS[p.type]} · 面額 {p.face_value} · 成本 {p.cost}
+                    {p.is_active ? '' : ' · 已停用'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditing(p)}
+                  className="shrink-0 cursor-pointer rounded-lg px-2 py-1 text-sm text-brand-600 underline underline-offset-2 transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+                >
+                  編輯
+                </button>
+              </div>
+
+              <div className="mt-4 flex items-end gap-4">
+                <label className="flex-1">
+                  <span className="text-xs text-ink-soft">權重</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={p.weight}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        [p.id]: Math.max(0, Number(e.target.value) || 0),
+                      }))
+                    }
+                    className="tabular mt-1 w-full rounded-lg border border-line px-3 py-2 text-right transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+                  />
+                </label>
+                <div className="flex-1 text-right">
+                  <p className="text-xs text-ink-soft">機率</p>
+                  <p className="tabular text-xl font-black">
+                    {prob.toFixed(2)}%
+                  </p>
+                </div>
+                <div className="flex-1 text-right">
+                  <p className="text-xs text-ink-soft">期望成本</p>
+                  <p className="tabular text-xl font-bold">{exp.toFixed(2)}</p>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+
+        <li className="rounded-card bg-brand-50 p-4">
+          <div className="flex items-center justify-between font-black">
+            <span>合計</span>
+            <span className="tabular">
+              權重 {totalWeight} · 100.00% · {calc.nominal.toFixed(2)}
+            </span>
+          </div>
+        </li>
+      </ul>
+
+      <div className="hidden overflow-x-auto rounded-card border border-line bg-raised lg:block">
+        <table className="w-full text-sm">
           <thead className="border-b border-line text-left text-xs text-ink-soft">
             <tr>
               <th className="px-4 py-3">獎項</th>
@@ -128,7 +215,7 @@ export function PrizeBoard({
                           [p.id]: Math.max(0, Number(e.target.value) || 0),
                         }))
                       }
-                      className="tabular w-20 rounded-lg border border-line px-2 py-1 text-right"
+                      className="tabular w-20 rounded-lg border border-line px-2 py-1 text-right transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
                     />
                   </td>
                   <td className="tabular px-3 py-3 text-right font-bold">
@@ -141,7 +228,7 @@ export function PrizeBoard({
                     <button
                       type="button"
                       onClick={() => setEditing(p)}
-                      className="text-brand-600 underline"
+                      className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded px-1 text-brand-600 underline underline-offset-2 hover:text-brand-700"
                     >
                       編輯
                     </button>
@@ -406,7 +493,7 @@ function Simulator({ prizes }: { prizes: Prize[] }) {
         <button
           type="button"
           onClick={run}
-          className="rounded-xl border border-line px-4 py-2 text-sm font-bold"
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl border border-line px-4 py-2 text-sm font-bold hover:bg-brand-50"
         >
           模擬 1000 次
         </button>
@@ -507,14 +594,14 @@ function WeightSaver({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-brand-500 px-5 py-2 text-sm font-bold text-white"
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl bg-brand-500 px-5 py-2 text-sm font-bold text-white hover:bg-brand-600"
         >
           {pending ? '儲存中⋯' : '儲存權重'}
         </button>
         <button
           type="button"
           onClick={onDone}
-          className="rounded-xl border border-line px-4 py-2 text-sm"
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl border border-line px-4 py-2 text-sm hover:bg-brand-50"
         >
           放棄變更
         </button>
@@ -549,7 +636,7 @@ function PrizeEditor({
           <h2 className="text-lg font-black">
             {prize ? '編輯獎項' : '新增獎項'}
           </h2>
-          <button type="button" onClick={onClose} className="text-ink-faint">
+          <button type="button" onClick={onClose} className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded px-2 py-1 text-ink-faint hover:text-ink">
             關閉
           </button>
         </div>
@@ -563,7 +650,7 @@ function PrizeEditor({
               defaultValue={prize?.name}
               required
               maxLength={40}
-              className="w-full rounded-xl border border-line px-3 py-2"
+              className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
             />
           </Field>
 
@@ -572,7 +659,7 @@ function PrizeEditor({
               name="type"
               value={type}
               onChange={(e) => setType(e.target.value as PrizeType)}
-              className="w-full rounded-xl border border-line px-3 py-2"
+              className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
             >
               {Object.entries(TYPE_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>
@@ -593,7 +680,7 @@ function PrizeEditor({
                 min={1}
                 defaultValue={prize?.credit_amount ?? 3}
                 required
-                className="w-full rounded-xl border border-line px-3 py-2"
+                className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
               />
             </Field>
           ) : (
@@ -605,7 +692,7 @@ function PrizeEditor({
                     type="number"
                     min={0}
                     defaultValue={prize?.face_value ?? 0}
-                    className="w-full rounded-xl border border-line px-3 py-2"
+                    className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
                   />
                 </Field>
                 <Field label="實際成本（元）" hint="只有你看得到">
@@ -614,7 +701,7 @@ function PrizeEditor({
                     type="number"
                     min={0}
                     defaultValue={prize?.cost ?? 0}
-                    className="w-full rounded-xl border border-line px-3 py-2"
+                    className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
                   />
                 </Field>
               </div>
@@ -626,7 +713,7 @@ function PrizeEditor({
                     type="number"
                     min={0}
                     defaultValue={prize?.discount_amt ?? ''}
-                    className="w-full rounded-xl border border-line px-3 py-2"
+                    className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
                   />
                 </Field>
                 <Field label="使用門檻">
@@ -635,7 +722,7 @@ function PrizeEditor({
                     type="number"
                     min={0}
                     defaultValue={prize?.min_spend ?? 0}
-                    className="w-full rounded-xl border border-line px-3 py-2"
+                    className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
                   />
                 </Field>
                 <Field label="折抵上限">
@@ -644,7 +731,7 @@ function PrizeEditor({
                     type="number"
                     min={0}
                     defaultValue={prize?.max_discount ?? ''}
-                    className="w-full rounded-xl border border-line px-3 py-2"
+                    className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
                   />
                 </Field>
               </div>
@@ -655,7 +742,7 @@ function PrizeEditor({
                   type="number"
                   min={1}
                   defaultValue={prize?.valid_days ?? ''}
-                  className="w-full rounded-xl border border-line px-3 py-2"
+                  className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
                 />
               </Field>
             </>
@@ -678,7 +765,7 @@ function PrizeEditor({
                 min={0}
                 defaultValue={prize?.weight ?? 0}
                 required
-                className="w-full rounded-xl border border-line px-3 py-2"
+                className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
               />
             </Field>
             <Field label="庫存上限" hint="留空為無限">
@@ -687,7 +774,7 @@ function PrizeEditor({
                 type="number"
                 min={0}
                 defaultValue={prize?.stock ?? ''}
-                className="w-full rounded-xl border border-line px-3 py-2"
+                className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
               />
             </Field>
           </div>
@@ -698,7 +785,7 @@ function PrizeEditor({
                 name="sort_order"
                 type="number"
                 defaultValue={prize?.sort_order ?? 0}
-                className="w-full rounded-xl border border-line px-3 py-2"
+                className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
               />
             </Field>
             <Field label="轉盤顏色">
@@ -706,7 +793,7 @@ function PrizeEditor({
                 name="color"
                 type="color"
                 defaultValue={prize?.color ?? '#457B9D'}
-                className="h-10 w-full rounded-xl border border-line"
+                className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 h-10 w-full rounded-xl border border-line"
               />
             </Field>
           </div>
@@ -716,7 +803,7 @@ function PrizeEditor({
               name="terms"
               defaultValue={prize?.terms ?? ''}
               maxLength={200}
-              className="w-full rounded-xl border border-line px-3 py-2"
+              className="w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
             />
           </Field>
 
@@ -739,7 +826,7 @@ function PrizeEditor({
             />
             <button
               type="submit"
-              className="w-full rounded-xl border border-line py-2 text-sm text-ink-soft"
+              className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 w-full rounded-xl border border-line py-2 text-sm text-ink-soft hover:bg-brand-50"
             >
               {prize.is_active ? '停用此獎項' : '重新啟用'}
             </button>

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { IconArrowLeft } from '@/components/icons';
 import { Card, Screen } from '@/components/ui';
 import { getSettings } from '@/lib/settings';
 import { db } from '@/lib/supabase';
@@ -23,8 +24,12 @@ export default async function RulesPage() {
   return (
     <Screen>
       <header className="mb-6">
-        <Link href="/wallet" className="text-sm text-brand-600">
-          ← 返回
+        <Link
+          href="/wallet"
+          className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2 py-1.5 text-sm text-brand-600 transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+        >
+          <IconArrowLeft className="size-4" />
+          返回
         </Link>
         <h1 className="mt-2 text-2xl font-black">活動辦法</h1>
       </header>

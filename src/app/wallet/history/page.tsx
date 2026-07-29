@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { IconArrowLeft } from '@/components/icons';
 import { Card, Screen } from '@/components/ui';
 import { formatForCustomer } from '@/lib/points';
 import { getSettings } from '@/lib/settings';
@@ -35,8 +36,12 @@ export default async function HistoryPage() {
   return (
     <Screen>
       <header className="mb-5 flex items-center gap-3">
-        <Link href="/wallet" className="text-brand-600">
-          ← 返回
+        <Link
+          href="/wallet"
+          className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2 py-1.5 text-brand-600 transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+        >
+          <IconArrowLeft className="size-5" />
+          返回
         </Link>
         <h1 className="text-xl font-bold">點數明細</h1>
       </header>

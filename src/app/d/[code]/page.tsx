@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 import { DrawFlow } from './draw-flow';
 import { normalizeCode } from '@/lib/codes';
 import { getSettings, isCampaignOpen } from '@/lib/settings';
@@ -8,7 +6,15 @@ import { db } from '@/lib/supabase';
 import { isClaimable, readToken } from '@/lib/tokens';
 import { getUserById } from '@/lib/users';
 import type { Prize } from '@/lib/types';
-import { LinkButton, StatusScreen } from '@/components/ui';
+import {
+  IconBan,
+  IconBowl,
+  IconCalendar,
+  IconCheck,
+  IconClock,
+  IconSearch,
+} from '@/components/icons';
+import { LinkButton, StatusScreen, TextLink } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +28,7 @@ export default async function DrawPage(props: PageProps<'/d/[code]'>) {
   if (!campaign.open) {
     return (
       <StatusScreen
-        emoji="🍜"
+        icon={<IconBowl className="size-12" />}
         title={campaign.reason ?? '活動暫停中'}
         detail="造成不便敬請見諒。已累積的點數仍然可以在結帳時折抵。"
         action={
@@ -39,7 +45,7 @@ export default async function DrawPage(props: PageProps<'/d/[code]'>) {
   if (state.kind === 'not_found') {
     return (
       <StatusScreen
-        emoji="🔍"
+        icon={<IconSearch className="size-12" />}
         title="查不到這組序號"
         detail="請確認 QR Code 是否完整，或對照小卡上的序號重新輸入。"
       />
@@ -49,7 +55,8 @@ export default async function DrawPage(props: PageProps<'/d/[code]'>) {
   if (state.kind === 'inactive') {
     return (
       <StatusScreen
-        emoji="⏳"
+        icon={<IconClock className="size-12" />}
+        tone="warn"
         title="這組序號尚未開放"
         detail="這批序號還沒啟用，請洽店家人員。"
       />
@@ -59,7 +66,8 @@ export default async function DrawPage(props: PageProps<'/d/[code]'>) {
   if (state.kind === 'expired') {
     return (
       <StatusScreen
-        emoji="📅"
+        icon={<IconCalendar className="size-12" />}
+        tone="warn"
         title="這組序號已過期"
         detail="超過使用期限了，下次消費會拿到新的一組。"
       />
@@ -69,7 +77,8 @@ export default async function DrawPage(props: PageProps<'/d/[code]'>) {
   if (state.kind === 'voided') {
     return (
       <StatusScreen
-        emoji="🚫"
+        icon={<IconBan className="size-12" />}
+        tone="bad"
         title="這組序號已作廢"
         detail="如果你認為這是誤判，請洽店家人員協助處理。"
       />
@@ -83,7 +92,8 @@ export default async function DrawPage(props: PageProps<'/d/[code]'>) {
 
     return (
       <StatusScreen
-        emoji="✅"
+        icon={<IconCheck className="size-12" />}
+        tone="good"
         title="這組序號已經領取過了"
         detail={
           <>
@@ -105,7 +115,8 @@ export default async function DrawPage(props: PageProps<'/d/[code]'>) {
   if (state.kind === 'drawn' && !isClaimable(state.token, settings.claim_window_minutes)) {
     return (
       <StatusScreen
-        emoji="⌛"
+        icon={<IconClock className="size-12" />}
+        tone="warn"
         title="超過領取時限了"
         detail={
           <>
@@ -143,9 +154,9 @@ export default async function DrawPage(props: PageProps<'/d/[code]'>) {
         alreadyDrawn={state.kind === 'drawn' ? state.prize : null}
       />
       <footer className="pb-8 text-center">
-        <Link href="/rules" className="text-sm text-ink-faint underline">
+        <TextLink href="/rules" className="text-sm text-ink-faint">
           活動辦法與中獎機率
-        </Link>
+        </TextLink>
       </footer>
     </>
   );

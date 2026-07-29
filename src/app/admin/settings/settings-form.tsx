@@ -34,7 +34,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
             name="primary_color"
             type="color"
             defaultValue={settings.primary_color}
-            className="h-10 w-full rounded-xl border border-line"
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 h-10 w-full rounded-xl border border-line"
           />
         </Field>
       </Section>
@@ -152,7 +152,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
           <select
             name="cost_cap_action"
             defaultValue={settings.cost_cap_action}
-            className="w-full rounded-xl border border-line px-3 py-2"
+            className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 w-full rounded-xl border border-line px-3 py-2"
           >
             <option value="notify">只通知我</option>
             <option value="pause">自動暫停活動</option>
@@ -186,7 +186,7 @@ export function SettingsForm({ settings }: { settings: Settings }) {
             name="rules_content"
             defaultValue={settings.rules_content}
             rows={14}
-            className="w-full rounded-xl border border-line px-3 py-2 font-mono text-sm"
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 w-full rounded-xl border border-line px-3 py-2 font-mono text-sm"
           />
         </Field>
       </Section>
@@ -239,7 +239,7 @@ function Text(props: React.ComponentProps<'input'>) {
   return (
     <input
       {...props}
-      className="w-full rounded-xl border border-line px-3 py-2"
+      className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 w-full rounded-xl border border-line px-3 py-2"
     />
   );
 }
@@ -249,7 +249,7 @@ function Num(props: React.ComponentProps<'input'>) {
     <input
       {...props}
       type="number"
-      className="tabular w-full rounded-xl border border-line px-3 py-2"
+      className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 tabular w-full rounded-xl border border-line px-3 py-2"
     />
   );
 }
@@ -272,7 +272,7 @@ function Toggle({
           type="checkbox"
           name={name}
           defaultChecked={defaultChecked}
-          className="h-5 w-5 rounded"
+          className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 h-5 w-5 rounded"
         />
         <span className="font-bold">{label}</span>
       </label>

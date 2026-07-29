@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
+import { IconArrowLeft } from '@/components/icons';
+import { ScanCard } from '@/components/scan-card';
 import { Card, Screen } from '@/components/ui';
 import { formatExpiryDate } from '@/lib/points';
 import { qrSvg } from '@/lib/qr';
@@ -33,9 +35,13 @@ export default async function CouponPage(
 
   return (
     <Screen>
-      <header className="mb-5 flex items-center gap-3">
-        <Link href="/wallet" className="text-brand-600">
-          ← 返回
+      <header className="mb-5">
+        <Link
+          href="/wallet"
+          className="inline-flex cursor-pointer items-center gap-1 rounded-xl px-2 py-1.5 text-brand-600 transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+        >
+          <IconArrowLeft className="size-5" />
+          返回
         </Link>
       </header>
 
@@ -50,14 +56,7 @@ export default async function CouponPage(
           </p>
         ) : (
           <>
-            <div
-              className="mx-auto mt-6 w-fit rounded-2xl bg-white p-3 ring-1 ring-line"
-              dangerouslySetInnerHTML={{ __html: qr }}
-            />
-            <p className="tabular mt-3 text-3xl font-black tracking-[0.3em] text-ink">
-              {coupon.redeem_code}
-            </p>
-            <p className="mt-2 text-sm text-ink-soft">結帳時出示給店員</p>
+            <ScanCard svg={qr} code={coupon.redeem_code} />
           </>
         )}
       </Card>
