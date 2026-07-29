@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { AutoRefresh } from '@/components/auto-refresh';
 import { IconArrowLeft } from '@/components/icons';
 import { Card, Screen } from '@/components/ui';
 import { formatForCustomer } from '@/lib/points';
@@ -35,6 +36,7 @@ export default async function HistoryPage() {
 
   return (
     <Screen>
+      <AutoRefresh intervalMs={15000} />
       <header className="mb-5 flex items-center gap-3">
         <Link
           href="/wallet"

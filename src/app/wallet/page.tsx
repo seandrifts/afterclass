@@ -8,6 +8,7 @@ import {
   IconReceipt,
   IconRules,
 } from '@/components/icons';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { ScanCard } from '@/components/scan-card';
 import { Card, Screen, TextLink } from '@/components/ui';
 import {
@@ -55,6 +56,8 @@ export default async function WalletPage() {
 
   return (
     <Screen>
+      {/* 店員折抵後，客人開著的這一頁要自己更新，不能等手動重整 */}
+      <AutoRefresh />
       <header className="mb-5 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm text-ink-soft">
