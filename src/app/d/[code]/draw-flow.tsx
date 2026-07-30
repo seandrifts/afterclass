@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { IconAlert, IconGift, IconLine, IconSparkle } from '@/components/icons';
+import { PrizeStrip } from './prize-strip';
 import { Button, Card, Screen, Spinner } from '@/components/ui';
 import { formatForCustomer, progressToward } from '@/lib/points';
 import type { Prize, PrizeSnapshot, Settings } from '@/lib/types';
@@ -127,47 +128,57 @@ export function DrawFlow({
 
   return (
     <Screen>
-      <header className="mb-6 text-center">
-        <p className="text-sm font-medium text-brand-600">
-          {settings.shop_name || '消費抽獎'}
-        </p>
-        <h1 className="mt-1 text-3xl font-black tracking-tight text-balance">
-          {phase === 'idle' ? '來抽一次吧' : null}
-          {phase === 'spinning' ? '抽獎中' : null}
-          {phase === 'revealed' || phase === 'claiming' ? '恭喜！' : null}
-          {phase === 'claimed' ? '已存進你的帳戶' : null}
-        </h1>
-      </header>
-
-      <Reel
-        prizes={prizes}
-        target={prize}
-        spinning={phase === 'spinning'}
-        revealed={revealed}
-        celebrate={revealed && isBigWin}
-      />
-
-      {phase === 'idle' ? (
-        <div className="mt-8">
-          <Button size="lg" onClick={draw}>
-            <IconSparkle className="size-6" />
-            開始抽獎
-          </Button>
-          <p className="mt-4 text-center text-sm text-ink-faint">
-            每組序號只能抽一次
+      {/*
+        抽獎前的內容集中在畫面中段。原本整頁靠上對齊，手機下方會空掉
+        一大片，看起來像沒載完
+      */}
+      <div className={phase === 'idle' ? 'flex flex-1 flex-col justify-center' : ''}>
+        <header className="mb-6 text-center">
+          <p className="text-sm font-medium text-brand-600">
+            {settings.shop_name || '消費抽獎'}
           </p>
-        </div>
-      ) : null}
+          <h1 className="mt-1 text-3xl font-black tracking-tight text-balance">
+            {phase === 'idle' ? '來抽一次吧' : null}
+            {phase === 'spinning' ? '抽獎中' : null}
+            {phase === 'revealed' || phase === 'claiming' ? '恭喜！' : null}
+            {phase === 'claimed' ? '已存進你的帳戶' : null}
+          </h1>
+        </header>
 
-      {phase === 'spinning' ? (
-        <p
-          className="mt-8 text-center text-ink-soft"
-          role="status"
-          aria-live="polite"
-        >
-          結果揭曉中
-        </p>
-      ) : null}
+        <Reel
+          prizes={prizes}
+          target={prize}
+          spinning={phase === 'spinning'}
+          revealed={revealed}
+          celebrate={revealed && isBigWin}
+        />
+
+        {phase === 'idle' ? (
+          <>
+            <PrizeStrip prizes={prizes} settings={settings} />
+
+            <div className="mt-8">
+              <Button size="lg" onClick={draw}>
+                <IconSparkle className="size-6" />
+                開始抽獎
+              </Button>
+              <p className="mt-4 text-center text-sm text-ink-faint">
+                每組序號只能抽一次
+              </p>
+            </div>
+          </>
+        ) : null}
+
+        {phase === 'spinning' ? (
+          <p
+            className="mt-8 text-center text-ink-soft"
+            role="status"
+            aria-live="polite"
+          >
+            結果揭曉中
+          </p>
+        ) : null}
+      </div>
 
       {revealed && prize ? (
         <Outcome
@@ -220,7 +231,8 @@ function Reel({
   revealed: boolean;
   celebrate: boolean;
 }) {
-  const itemHeight = 88;
+  // 原本 88px 看起來像一個輸入欄位，不像抽獎機。加高之後才有「機台」的份量
+  const itemHeight = 132;
   const targetIndex = target
     ? prizes.findIndex((p) => p.id === target.prize_id)
     : 0;
@@ -237,50 +249,71 @@ function Reel({
     <div className="relative">
       {celebrate ? <Confetti /> : null}
 
+      {/* 機台外框。深色底讓中間的轉軸看起來是嵌進去的，不是貼上去的 */}
       <div
-        className={`relative overflow-hidden rounded-card border-4 bg-raised shadow-lg transition-colors duration-500 ${
-          celebrate ? 'border-amber-400' : 'border-brand-500'
+        className={`rounded-card p-3 shadow-lg transition-colors duration-500 ${
+          celebrate ? 'bg-amber-400' : 'bg-brand-500'
         }`}
-        style={{ height: itemHeight }}
-        aria-live="polite"
-        aria-label={revealed && target ? `抽中 ${target.name}` : '抽獎轉盤'}
       >
         <div
-          className="will-change-transform"
-          style={{
-            transform: `translateY(-${offset}px)`,
-            transition: spinning
-              ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.18, 1)`
-              : 'none',
-          }}
+          className="relative overflow-hidden rounded-2xl bg-raised"
+          style={{ height: itemHeight }}
+          aria-live="polite"
+          aria-label={revealed && target ? `抽中 ${target.name}` : '抽獎轉盤'}
         >
-          {loops.map((loop) =>
-            prizes.map((p) => (
-              <div
-                key={`${loop}-${p.id}`}
-                className="flex items-center justify-center gap-2 font-black"
-                style={{ height: itemHeight, color: p.color ?? undefined }}
-              >
-                <span className="text-2xl">{p.name}</span>
-              </div>
-            )),
-          )}
-        </div>
-
-        {/* 沒抽之前遮一層，避免客人先看到獎項排列去猜順序 */}
-        {!spinning && !revealed ? (
-          <div className="absolute inset-0 flex items-center justify-center gap-3 bg-brand-50">
-            <IconGift className="size-9 text-brand-500" />
-            <span className="text-3xl font-black tracking-[0.2em] text-brand-500">
-              ???
-            </span>
+          <div
+            className="will-change-transform"
+            style={{
+              transform: `translateY(-${offset}px)`,
+              transition: spinning
+                ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.18, 1)`
+                : 'none',
+            }}
+          >
+            {loops.map((loop) =>
+              prizes.map((p) => (
+                <div
+                  key={`${loop}-${p.id}`}
+                  className="flex items-center justify-center px-4 text-center font-black"
+                  style={{ height: itemHeight, color: p.color ?? undefined }}
+                >
+                  <span className="text-3xl text-balance">{p.name}</span>
+                </div>
+              )),
+            )}
           </div>
-        ) : null}
 
-        {/* 轉動時上下加陰影，強化「正在滾動」的視覺 */}
-        {spinning ? (
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-black/15 via-transparent to-black/15" />
-        ) : null}
+          {/* 沒抽之前遮一層，避免客人先看到獎項排列去猜順序 */}
+          {!spinning && !revealed ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-brand-50">
+              <IconGift className="size-10 text-brand-400" />
+              <span className="text-4xl font-black tracking-[0.25em] text-brand-500">
+                ???
+              </span>
+            </div>
+          ) : null}
+
+          {/* 轉動時上下加陰影，強化「正在滾動」的視覺 */}
+          {spinning ? (
+            <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-black/20 via-transparent to-black/20" />
+          ) : null}
+
+          {/* 中獎線。兩側的短刻痕讓人知道停在哪裡才算中 */}
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+            <span
+              className={`h-8 w-1.5 rounded-r-full transition-colors duration-500 ${
+                celebrate ? 'bg-amber-400' : 'bg-brand-400'
+              }`}
+            />
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center">
+            <span
+              className={`h-8 w-1.5 rounded-l-full transition-colors duration-500 ${
+                celebrate ? 'bg-amber-400' : 'bg-brand-400'
+              }`}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

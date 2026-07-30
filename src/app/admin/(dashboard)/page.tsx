@@ -43,6 +43,7 @@ export default async function AdminDashboard() {
             value={s.todayRedeemedTotal}
             unit="元"
             note="以實際折抵計"
+            emphasis
           />
         </div>
         {scanRate !== null && scanRate < 50 ? (
@@ -73,52 +74,89 @@ export default async function AdminDashboard() {
 
         {capUsage !== null ? (
           <div className="mt-4">
-            <div className="h-3 overflow-hidden rounded-full bg-brand-100">
+            {/*
+              軌道用虛線邊框而不是實色底。實色底在 0% 時整條看起來
+              像是「已經填滿」，反而讓人誤判成本狀況
+            */}
+            <div
+              className="h-3 overflow-hidden rounded-full border border-dashed border-brand-200 bg-white"
+              role="progressbar"
+              aria-valuenow={capUsage}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="本月成本佔上限比例"
+            >
               <div
-                className={`h-full rounded-full ${
+                className={`h-full rounded-full transition-[width] duration-700 ${
                   capUsage >= 90 ? 'bg-bad' : 'bg-brand-500'
                 }`}
                 style={{ width: `${Math.min(100, capUsage)}%` }}
               />
             </div>
             <p className="mt-2 text-sm text-ink-soft">
-              本月成本已用 {capUsage}% 的上限
+              本月成本已用 <strong className="tabular">{capUsage}%</strong> 的上限
+              <span className="text-ink-faint">
+                {' '}（{s.monthRedeemedTotal} / {settings.monthly_cost_cap} 元）
+              </span>
             </p>
           </div>
         ) : null}
       </section>
 
+      {/*
+        原本這張卡塞了一整段「為什麼要看這個數字」的說明。儀表板是
+        每天掃一眼的地方，不是文件，長解釋放在這裡只會擋住數字。
+        判讀方式移到 details 裡，需要時才展開。
+      */}
       <Card>
-        <h2 className="text-sm font-bold text-ink-soft">流通中點數（負債）</h2>
-        <p className="tabular mt-2 text-4xl font-black">
-          {s.outstanding}
-          <span className="ml-2 text-lg font-bold text-ink-soft">元</span>
-        </p>
-        <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-          客人手上還沒用掉的餘額總和。活動初期會一路上升，跑滿一個到期週期
-          （{settings.credit_expire_days} 天）之後應該趨於穩定。
-          如果三個月後還在直線上升，代表客人不來用，該檢討的是金額級距
-          或折抵流程，不是加碼獎項。
-        </p>
-        <p className="mt-3 text-sm">
-          <span className="font-bold">{settings.expire_warn_days}</span> 天內到期：
-          <span className="font-bold text-brand-600">
-            {' '}
-            {s.expiringSoonAmount} 元 / {s.expiringSoonPeople} 人
-          </span>
-        </p>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-bold text-ink-soft">
+              流通中點數（負債）
+            </h2>
+            <p className="tabular mt-1 text-4xl font-black">
+              {s.outstanding}
+              <span className="ml-2 text-lg font-bold text-ink-soft">元</span>
+            </p>
+          </div>
+
+          <div className="text-right">
+            <p className="text-sm text-ink-soft">
+              {settings.expire_warn_days} 天內到期
+            </p>
+            <p className="tabular mt-1 text-2xl font-black text-brand-600">
+              {s.expiringSoonAmount}
+              <span className="ml-1 text-sm">元</span>
+              <span className="ml-2 text-sm font-medium text-ink-soft">
+                {s.expiringSoonPeople} 人
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <details className="group mt-4">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded text-xs text-ink-faint underline underline-offset-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300">
+            這個數字怎麼看
+          </summary>
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+            客人手上還沒用掉的餘額總和。活動初期會一路上升，跑滿一個到期
+            週期（{settings.credit_expire_days} 天）之後應該趨於穩定。
+            如果三個月後還在直線上升，代表客人不來用，該檢討的是金額級距
+            或折抵流程，不是加碼獎項。
+          </p>
+        </details>
       </Card>
 
       <div className="flex flex-wrap gap-3">
         <Link
           href="/admin/prizes"
-          className="rounded-xl bg-brand-500 px-5 py-3 text-sm font-bold text-white"
+          className="cursor-pointer rounded-xl bg-brand-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-brand-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
         >
           調整獎項與機率
         </Link>
         <Link
           href="/admin/tokens"
-          className="rounded-xl border border-line bg-raised px-5 py-3 text-sm font-bold"
+          className="cursor-pointer rounded-xl border border-line bg-raised px-5 py-3 text-sm font-bold transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
         >
           序號管理
         </Link>
@@ -127,25 +165,57 @@ export default async function AdminDashboard() {
   );
 }
 
+/**
+ * 統計方塊。
+ *
+ * emphasis 用來區分主要指標。原本 8 個方塊長得一模一樣，
+ * 掃過去看不出哪個該優先注意，等於沒有層級。
+ */
 function Tile({
   label,
   value,
   unit,
   note,
+  emphasis,
 }: {
   label: string;
   value: number;
   unit: string;
   note?: string;
+  emphasis?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-line bg-raised p-4">
-      <p className="text-xs text-ink-soft">{label}</p>
-      <p className="tabular mt-1 text-2xl font-black">
-        {value}
-        <span className="ml-1 text-sm font-bold text-ink-soft">{unit}</span>
+    <div
+      className={`rounded-2xl border p-4 ${
+        emphasis
+          ? 'border-brand-300 bg-brand-50'
+          : 'border-line bg-raised'
+      }`}
+    >
+      <p
+        className={`text-xs font-medium ${
+          emphasis ? 'text-brand-700' : 'text-ink-soft'
+        }`}
+      >
+        {label}
       </p>
-      {note ? <p className="mt-1 text-xs text-ink-faint">{note}</p> : null}
+      <p
+        className={`tabular mt-1 font-black ${
+          emphasis ? 'text-3xl text-brand-700' : 'text-2xl'
+        }`}
+      >
+        {value}
+        <span className="ml-1 text-sm font-bold opacity-60">{unit}</span>
+      </p>
+      {note ? (
+        <p
+          className={`mt-1 text-xs ${
+            emphasis ? 'text-brand-600' : 'text-ink-faint'
+          }`}
+        >
+          {note}
+        </p>
+      ) : null}
     </div>
   );
 }

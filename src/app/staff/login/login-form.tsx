@@ -56,9 +56,7 @@ export function LoginForm({
             </button>
           ))}
         </div>
-      ) : (
-        <p className="text-center text-lg font-bold">{staff[0].name}</p>
-      )}
+      ) : null}
 
       <input type="hidden" name="staffId" value={selected} />
       <input type="hidden" name="pin" value={pin} />
@@ -77,12 +75,12 @@ export function LoginForm({
         {Array.from({ length: MAX_PIN }, (_, i) => (
           <span
             key={i}
-            className={`size-3.5 rounded-full transition-colors duration-150 ${
+            className={`size-4 rounded-full transition-colors duration-150 ${
               i < pin.length
                 ? 'bg-brand-500'
-                : i < MIN_PIN
-                  ? 'bg-line'
-                  : 'bg-line/40'
+                : // 未輸入的位置用外框而不是淡色實心。原本 bg-line/40
+                  // 在暖白背景上幾乎看不見，看不出總共有幾位
+                  'border-2 border-line bg-transparent'
             }`}
           />
         ))}
