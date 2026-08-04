@@ -5,57 +5,112 @@ import { consumeOAuthState, setUserSession } from '@/lib/session';
 import { db } from '@/lib/supabase';
 import { upsertLineUser } from '@/lib/users';
 
+/**
+ * 診斷紀錄。
+ *
+ * 原本只有「成功但 cookie 遺失」會留紀錄，失敗完全沒有伺服器端痕跡，
+ * 客人回報登不進去時只能靠猜。現在每一種失敗都記下發生在哪一步，
+ * 後台的 audit log 就能直接指出問題。
+ *
+ * 刻意不記錄 code、access token、state 的內容，那些是憑證。
+ * 只記錄「有沒有」與「哪一步失敗」。
+ */
+async function trace(
+  step: string,
+  detail: Record<string, unknown>,
+  userId?: string,
+) {
+  try {
+    await db().from('audit_logs').insert({
+      actor_type: userId ? 'user' : 'system',
+      actor_id: userId ?? null,
+      action: `login_${step}`,
+      target_type: 'login',
+      detail,
+    });
+  } catch {
+    // 記錄失敗不該擋住登入流程
+  }
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
 
-  // 客人在 LINE 的授權畫面按了取消
+  // LINE 端就先失敗了（客人按取消、Channel 未發布、權限不足⋯）
   const lineError = url.searchParams.get('error');
   if (lineError) {
+    await trace('rejected_by_line', {
+      error: lineError,
+      description: url.searchParams.get('error_description'),
+      提示:
+        lineError === 'access_denied'
+          ? '客人按了取消，或 Channel 還在 Developing 狀態只允許管理員登入'
+          : 'LINE 端拒絕了這次授權',
+    });
     return redirectWithError(
       lineError === 'access_denied' ? 'cancelled' : 'line_failed',
     );
   }
 
-  if (!code || !state) return redirectWithError('missing_params');
+  if (!code || !state) {
+    await trace('missing_params', {
+      有code: Boolean(code),
+      有state: Boolean(state),
+    });
+    return redirectWithError('missing_params');
+  }
 
   const stored = await consumeOAuthState(state);
-  if (!stored) return redirectWithError('bad_state');
+  if (!stored) {
+    await trace('bad_state', {
+      提示: 'state 簽章驗證失敗或已過期。可能是 SESSION_SECRET 變更過，或超過 15 分鐘',
+    });
+    return redirectWithError('bad_state');
+  }
 
-  // 失敗時要能回到原本那組序號，不然客人重試也領不到獎
   const next = stored.next;
+
+  let profile: Awaited<ReturnType<typeof fetchProfile>>;
 
   try {
     const token = await exchangeCode(code);
-    const profile = await fetchProfile(token.access_token);
+    profile = await fetchProfile(token.access_token);
+  } catch (e) {
+    await trace('line_api_failed', {
+      訊息: e instanceof Error ? e.message : String(e),
+      提示: '向 LINE 換 token 或取 profile 失敗。檢查 Channel secret 與 Callback URL',
+    });
+    return redirectWithError('line_failed', next);
+  }
+
+  try {
     const user = await upsertLineUser(profile);
 
-    if (user.is_blocked) return redirectWithError('blocked', next);
+    if (user.is_blocked) {
+      await trace('blocked', {}, user.id);
+      return redirectWithError('blocked', next);
+    }
 
     await setUserSession(user.id);
 
-    // cookie 遺失時仍然放行（見 consumeOAuthState 的說明），
-    // 但留下紀錄。如果這個數字異常地高，代表有值得查的事
-    if (!stored.bound) {
-      await db()
-        .from('audit_logs')
-        .insert({
-          actor_type: 'user',
-          actor_id: user.id,
-          action: 'login_unbound_state',
-          target_type: 'user',
-          target_id: user.id,
-          detail: { reason: 'oauth state cookie 遺失，僅驗證簽章' },
-        })
-        .then(
-          () => undefined,
-          () => undefined, // 記錄失敗不該擋住登入
-        );
-    }
+    await trace(
+      'success',
+      {
+        新帳號: user.visit_count === 0 && user.balance === 0,
+        cookie綁定: stored.bound,
+        返回: next,
+      },
+      user.id,
+    );
 
     return NextResponse.redirect(new URL(next, env.siteUrl));
-  } catch {
+  } catch (e) {
+    await trace('user_upsert_failed', {
+      訊息: e instanceof Error ? e.message : String(e),
+      提示: '建立或更新會員資料失敗，多半是資料庫問題',
+    });
     return redirectWithError('line_failed', next);
   }
 }
@@ -73,7 +128,12 @@ async function exchangeCode(code: string): Promise<{ access_token: string }> {
     }),
   });
 
-  if (!res.ok) throw new Error('LINE token exchange failed');
+  if (!res.ok) {
+    // LINE 的錯誤訊息很具體，直接帶進紀錄裡才查得出原因
+    const body = await res.text();
+    throw new Error(`token 交換失敗 HTTP ${res.status}: ${body.slice(0, 200)}`);
+  }
+
   return res.json();
 }
 
@@ -86,7 +146,11 @@ async function fetchProfile(accessToken: string): Promise<{
     headers: { authorization: `Bearer ${accessToken}` },
   });
 
-  if (!res.ok) throw new Error('LINE profile fetch failed');
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`profile 取得失敗 HTTP ${res.status}: ${body.slice(0, 200)}`);
+  }
+
   return res.json();
 }
 
