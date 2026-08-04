@@ -22,31 +22,38 @@ export default async function TokensPage() {
     .select('*')
     .order('created_at', { ascending: false });
 
-  const rows: BatchRow[] = [];
+  /*
+    一次 GROUP BY 拿回所有批次的統計。
 
-  for (const b of batches ?? []) {
-    const statuses = ['inactive', 'active', 'drawn', 'claimed'] as const;
+    原本是對每個批次分別發 4 次 count 查詢，而且批次之間循序等待，
+    10 個批次就是 40 次查詢分 10 輪往返。
+  */
+  interface BatchStat {
+    batch_id: string;
+    inactive: number;
+    active: number;
+    drawn: number;
+    claimed: number;
+  }
 
-    const counts = await Promise.all(
-      statuses.map((s) =>
-        db()
-          .from('draw_tokens')
-          .select('id', { count: 'exact', head: true })
-          .eq('batch_id', b.id)
-          .eq('status', s),
-      ),
-    );
+  const { data: stats } = await db().rpc('batch_stats');
 
-    rows.push({
+  const byBatch = new Map<string, BatchStat>(
+    ((stats ?? []) as BatchStat[]).map((s) => [s.batch_id, s]),
+  );
+
+  const rows: BatchRow[] = (batches ?? []).map((b) => {
+    const s = byBatch.get(b.id);
+    return {
       ...b,
       counts: {
-        inactive: counts[0].count ?? 0,
-        active: counts[1].count ?? 0,
-        drawn: counts[2].count ?? 0,
-        claimed: counts[3].count ?? 0,
+        inactive: Number(s?.inactive ?? 0),
+        active: Number(s?.active ?? 0),
+        drawn: Number(s?.drawn ?? 0),
+        claimed: Number(s?.claimed ?? 0),
       },
-    });
-  }
+    };
+  });
 
   return <TokenBoard batches={rows} validDays={settings.card_token_valid_days} />;
 }

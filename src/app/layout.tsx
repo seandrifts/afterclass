@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Noto_Sans_TC } from 'next/font/google';
 
 import './globals.css';
+import { env } from '@/lib/env';
 import { getSettings } from '@/lib/settings';
 
 const notoTC = Noto_Sans_TC({
@@ -30,6 +31,12 @@ export async function generateMetadata(): Promise<Metadata> {
   const description = '來店消費即可抽獎，100% 中獎，回饋點數下次折抵';
 
   return {
+    /*
+      分享到 LINE 時的預覽圖是相對路徑，Next.js 需要 metadataBase
+      才解析得出完整網址。沒設定的話會退回 localhost，圖就出不來。
+      目前在 Vercel 上靠系統變數僥倖正確，但綁自訂網域就會壞。
+    */
+    metadataBase: new URL(env.siteUrl),
     title: { default: shopName, template: `%s · ${shopName}` },
     description,
     applicationName: shopName,
