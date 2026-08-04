@@ -5,11 +5,17 @@ import { getUserSession } from '@/lib/session';
 import { IconBowl, IconLine } from '@/components/icons';
 import { Card, Screen } from '@/components/ui';
 
+/**
+ * 錯誤訊息要告訴客人「現在該做什麼」，不是描述系統狀態。
+ * 客人看到「登入連結已失效」只會困惑，看到「請再按一次下面的按鈕」
+ * 才知道怎麼辦。
+ */
 const ERRORS: Record<string, string> = {
-  bad_state: '登入連結已失效，請重新操作一次。',
+  bad_state: '登入逾時了，請再按一次下面的按鈕。',
   blocked: '這個帳號目前無法使用，請洽店家人員。',
-  line_failed: 'LINE 登入沒有完成，請再試一次。',
-  missing_params: '登入資訊不完整，請重新操作一次。',
+  cancelled: '你取消了授權。要累積點數的話，請再按一次下面的按鈕。',
+  line_failed: 'LINE 登入沒有完成，請再按一次下面的按鈕。',
+  missing_params: '登入資訊不完整，請再按一次下面的按鈕。',
 };
 
 export default async function LoginPage(props: PageProps<'/login'>) {
@@ -40,9 +46,17 @@ export default async function LoginPage(props: PageProps<'/login'>) {
         </div>
 
         {errorKey ? (
-          <p role="alert" className="mt-6 rounded-2xl bg-red-50 px-4 py-3 text-center text-sm text-pretty text-bad">
-            {ERRORS[errorKey] ?? '登入失敗，請再試一次。'}
-          </p>
+          <div
+            role="alert"
+            className="mt-6 rounded-2xl bg-red-50 px-4 py-3 text-center text-sm text-pretty text-bad"
+          >
+            <p>{ERRORS[errorKey] ?? '登入失敗，請再按一次下面的按鈕。'}</p>
+            {next.startsWith('/d/') ? (
+              <p className="mt-1 font-bold">
+                你抽中的獎品還在，登入後就會存進帳戶。
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="mt-8">

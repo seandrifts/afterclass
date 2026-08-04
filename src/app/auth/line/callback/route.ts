@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { env } from '@/lib/env';
 import { consumeOAuthState, setUserSession } from '@/lib/session';
+import { db } from '@/lib/supabase';
 import { upsertLineUser } from '@/lib/users';
 
 export async function GET(request: Request) {
@@ -9,30 +10,53 @@ export async function GET(request: Request) {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
 
-  if (!code || !state) {
-    return redirectWithError(request, 'missing_params');
+  // 客人在 LINE 的授權畫面按了取消
+  const lineError = url.searchParams.get('error');
+  if (lineError) {
+    return redirectWithError(
+      lineError === 'access_denied' ? 'cancelled' : 'line_failed',
+    );
   }
 
-  // state 比對防 CSRF，順便取回登入前要去的地方
+  if (!code || !state) return redirectWithError('missing_params');
+
   const stored = await consumeOAuthState(state);
-  if (!stored) {
-    return redirectWithError(request, 'bad_state');
-  }
+  if (!stored) return redirectWithError('bad_state');
+
+  // 失敗時要能回到原本那組序號，不然客人重試也領不到獎
+  const next = stored.next;
 
   try {
     const token = await exchangeCode(code);
     const profile = await fetchProfile(token.access_token);
     const user = await upsertLineUser(profile);
 
-    if (user.is_blocked) {
-      return redirectWithError(request, 'blocked');
-    }
+    if (user.is_blocked) return redirectWithError('blocked', next);
 
     await setUserSession(user.id);
 
-    return NextResponse.redirect(new URL(stored.next, env.siteUrl));
+    // cookie 遺失時仍然放行（見 consumeOAuthState 的說明），
+    // 但留下紀錄。如果這個數字異常地高，代表有值得查的事
+    if (!stored.bound) {
+      await db()
+        .from('audit_logs')
+        .insert({
+          actor_type: 'user',
+          actor_id: user.id,
+          action: 'login_unbound_state',
+          target_type: 'user',
+          target_id: user.id,
+          detail: { reason: 'oauth state cookie 遺失，僅驗證簽章' },
+        })
+        .then(
+          () => undefined,
+          () => undefined, // 記錄失敗不該擋住登入
+        );
+    }
+
+    return NextResponse.redirect(new URL(next, env.siteUrl));
   } catch {
-    return redirectWithError(request, 'line_failed');
+    return redirectWithError('line_failed', next);
   }
 }
 
@@ -66,8 +90,16 @@ async function fetchProfile(accessToken: string): Promise<{
   return res.json();
 }
 
-function redirectWithError(request: Request, reason: string) {
+/**
+ * 導回登入頁。
+ *
+ * 一定要把 next 帶回去。客人抽完獎在登入時失敗，如果這裡把返回位置
+ * 弄丟了，他重新登入之後會被丟到錢包頁，那組已經抽出結果的序號
+ * 就領不到了。
+ */
+function redirectWithError(reason: string, next?: string) {
   const target = new URL('/login', env.siteUrl);
   target.searchParams.set('error', reason);
+  if (next) target.searchParams.set('next', next);
   return NextResponse.redirect(target);
 }

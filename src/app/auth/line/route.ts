@@ -1,8 +1,7 @@
-import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 import { env } from '@/lib/env';
-import { setOAuthState } from '@/lib/session';
+import { createOAuthState } from '@/lib/session';
 
 /**
  * 導向 LINE 授權頁。
@@ -14,8 +13,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const next = safeNext(url.searchParams.get('next'));
 
-  const state = randomBytes(16).toString('hex');
-  await setOAuthState(state, next);
+  const state = await createOAuthState(next);
 
   const authorize = new URL('https://access.line.me/oauth2/v2.1/authorize');
   authorize.searchParams.set('response_type', 'code');

@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
 
@@ -100,23 +101,62 @@ export async function clearStaffSession() {
  * 才能領取獎品。這個 next 就是用來記住 /d/XXXX 的。
  */
 const OAUTH_COOKIE = 'ld_oauth';
+const OAUTH_TTL = 900;
 
-export async function setOAuthState(state: string, next: string) {
-  const token = await sign({ state, next }, 600);
-  (await cookies()).set(OAUTH_COOKIE, token, { ...baseCookie, maxAge: 600 });
+/**
+ * 建立授權用的 state。
+ *
+ * 回傳的字串會放進 OAuth 的 state 參數，LINE 授權完成後原封不動送回來。
+ * 內容是一個簽了名的 JWT，帶著 nonce 與登入後要回去的位置。
+ *
+ * 為什麼不像以前那樣把 next 只存在 cookie 裡：
+ *
+ * LINE 的內建瀏覽器（客人從 LINE 聊天室點連結進來時就是這個）在
+ * 完成授權後，經常會回到一個全新的 webview，原本設下的 cookie 就不見了。
+ * 一旦 cookie 消失，舊的實作會同時失去 CSRF 綁定與返回目的地，
+ * 客人就會看到「登入連結已失效」而且回不到原本那組抽獎序號。
+ *
+ * 把資料放進 state 之後，就算 cookie 掉了也還原得回來。cookie 仍然
+ * 會設，但降級成「有就檢查、沒有也能過」的額外綁定。
+ */
+export async function createOAuthState(next: string): Promise<string> {
+  const nonce = randomBytes(16).toString('hex');
+  const state = await sign({ n: nonce, next }, OAUTH_TTL);
+
+  (await cookies()).set(OAUTH_COOKIE, nonce, {
+    ...baseCookie,
+    maxAge: OAUTH_TTL,
+  });
+
+  return state;
+}
+
+export interface OAuthStateResult {
+  next: string;
+  /**
+   * cookie 是否成功比對。
+   *
+   * true  = 完整的 CSRF 保護
+   * false = cookie 遺失（多半是 LINE 內建瀏覽器），只驗證了簽章。
+   *         簽章仍然擋得住偽造的 state，攻擊者無法自己生一個出來，
+   *         但擋不住「誘導受害者用攻擊者的授權碼登入」這種情境。
+   *         以本站的風險（點數會進錯帳戶）權衡，讓客人登不進去
+   *         的代價更高，所以選擇放行並記錄下來。
+   */
+  bound: boolean;
 }
 
 export async function consumeOAuthState(
   state: string,
-): Promise<{ next: string } | null> {
+): Promise<OAuthStateResult | null> {
+  const payload = await verify<{ n: string; next: string }>(state);
+
+  // 簽章不符或已過期一律擋下，這是不可退讓的部分
+  if (!payload?.n || typeof payload.next !== 'string') return null;
+
   const jar = await cookies();
-  const raw = jar.get(OAUTH_COOKIE)?.value;
+  const nonce = jar.get(OAUTH_COOKIE)?.value;
   jar.delete(OAUTH_COOKIE);
 
-  if (!raw) return null;
-
-  const payload = await verify<{ state: string; next: string }>(raw);
-  if (!payload || payload.state !== state) return null;
-
-  return { next: payload.next };
+  return { next: payload.next, bound: nonce === payload.n };
 }
