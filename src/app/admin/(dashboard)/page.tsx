@@ -253,6 +253,26 @@ function Alerts({
     });
   }
 
+  /*
+    排程停掉是「安靜的失敗」：點數不會到期、到期提醒不會發送，
+    而且不會有任何錯誤畫面。要主動盯著才發現得了。
+
+    正常是每天跑一次，超過 36 小時沒跑就代表有問題。
+  */
+  const cronAge = stats.cronAgeHours;
+
+  if (cronAge === null) {
+    alerts.push({
+      level: 'warn',
+      text: '每日排程還沒執行過。第一次會在明天凌晨 4 點，到時候再回來確認。',
+    });
+  } else if (cronAge > 36) {
+    alerts.push({
+      level: 'bad',
+      text: `每日排程已經 ${Math.floor(cronAge / 24)} 天沒有執行。點數不會到期，到期提醒也不會發送。請檢查 Vercel 的 Cron 設定。`,
+    });
+  }
+
   if (stats.activeTokensLeft < 50) {
     alerts.push({
       level: 'warn',

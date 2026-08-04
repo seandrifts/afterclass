@@ -36,6 +36,17 @@ export interface DashboardStats {
 
   /** 這個必須永遠是 0。非 0 代表有人繞過 ledger 動了餘額 */
   integrityBreaches: number;
+
+  /** 每日排程最後一次執行時間。null 代表從來沒跑過 */
+  lastCronAt: string | null;
+
+  /**
+   * 距離上次排程幾小時。null 代表從來沒跑過。
+   *
+   * 在這裡算而不是在元件裡算，因為 Date.now() 是不純的，
+   * 元件應該只負責呈現已經算好的數字。
+   */
+  cronAgeHours: number | null;
 }
 
 export async function loadDashboard(
@@ -59,6 +70,7 @@ export async function loadDashboard(
     expiring,
     tokensLeft,
     integrity,
+    lastCron,
   ] = await Promise.all([
     db()
       .from('draw_tokens')
@@ -103,6 +115,13 @@ export async function loadDashboard(
       .select('id', { count: 'exact', head: true })
       .eq('status', 'active'),
     db().rpc('check_balance_integrity'),
+    db()
+      .from('audit_logs')
+      .select('created_at')
+      .eq('action', 'cron_daily')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const sum = (rows: { amount: number }[] | null) =>
@@ -131,5 +150,10 @@ export async function loadDashboard(
     integrityBreaches: Array.isArray(integrity.data)
       ? integrity.data.length
       : 0,
+
+    lastCronAt: lastCron.data?.created_at ?? null,
+    cronAgeHours: lastCron.data?.created_at
+      ? (Date.now() - new Date(lastCron.data.created_at).getTime()) / 3_600_000
+      : null,
   };
 }

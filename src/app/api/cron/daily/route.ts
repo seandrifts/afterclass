@@ -34,6 +34,35 @@ export async function GET(request: Request) {
   const integrity = await db().rpc('check_balance_integrity');
   const breaches = Array.isArray(integrity.data) ? integrity.data.length : 0;
 
+  /*
+    每次執行都留一筆心跳。
+
+    原本只有「真的有東西到期」才寫紀錄，平常跑完不留痕跡，所以無法
+    分辨「排程正常但沒事可做」與「排程根本沒跑」。後者會讓點數永遠
+    不到期、到期提醒永遠不發，而且要等好幾個月才會被發現。
+
+    這筆紀錄同時也是 Supabase 免費方案的保命符：每天一次資料庫寫入
+    就足以讓專案不被判定為閒置而暫停。
+  */
+  await db()
+    .from('audit_logs')
+    .insert({
+      actor_type: 'system',
+      action: 'cron_daily',
+      target_type: 'cron',
+      detail: {
+        到期餘額: balances.data ?? 0,
+        到期券: coupons.data ?? 0,
+        失效序號: tokens.data ?? 0,
+        推播: push,
+        帳務異常: breaches,
+      },
+    })
+    .then(
+      () => undefined,
+      () => undefined,
+    );
+
   return NextResponse.json({
     expiredBalances: balances.data ?? 0,
     expiredCoupons: coupons.data ?? 0,
