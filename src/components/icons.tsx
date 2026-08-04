@@ -148,6 +148,20 @@ export const IconSparkle = (p: IconProps) => (
   </Icon>
 );
 
+export const IconSound = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 9.5h3L12 5.5v13L7 14.5H4z" />
+    <path d="M16 9.5a4 4 0 0 1 0 5M18.5 7a7.5 7.5 0 0 1 0 10" />
+  </Icon>
+);
+
+export const IconSoundOff = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 9.5h3L12 5.5v13L7 14.5H4z" />
+    <path d="m16.5 10 4 4M20.5 10l-4 4" />
+  </Icon>
+);
+
 export const IconBackspace = (p: IconProps) => (
   <Icon {...p}>
     <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z" />

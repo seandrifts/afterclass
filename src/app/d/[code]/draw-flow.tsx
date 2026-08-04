@@ -1,11 +1,33 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
-import { IconAlert, IconGift, IconLine, IconSparkle } from '@/components/icons';
+import {
+  IconAlert,
+  IconGift,
+  IconLine,
+  IconSound,
+  IconSoundOff,
+  IconSparkle,
+} from '@/components/icons';
 import { PrizeStrip } from './prize-strip';
 import { Button, Card, Screen, Spinner } from '@/components/ui';
 import { formatForCustomer, progressToward } from '@/lib/points';
+import {
+  isSoundEnabled,
+  playSpinSound,
+  playWinSound,
+  setSoundEnabled,
+  soundServerSnapshot,
+  subscribeSound,
+  unlockAudio,
+} from '@/lib/sound';
 import type { Prize, PrizeSnapshot, Settings } from '@/lib/types';
 
 type Phase =
@@ -43,7 +65,11 @@ export function DrawFlow({
     setPhase('spinning');
     setMessage(null);
 
-    // 轉動開始的觸覺回饋。手機在吵雜的店裡，震動比音效有效
+    // 必須在使用者手勢的當下解鎖音訊，實際發聲是三秒後轉盤停下來時
+    unlockAudio();
+    playSpinSound();
+
+    // 觸覺回饋。手機轉靜音時聽不到聲音，震動仍然有感
     navigator.vibrate?.(30);
 
     try {
@@ -63,8 +89,11 @@ export function DrawFlow({
       setPrize(json.prize as PrizeSnapshot);
 
       // 等轉盤停下來才揭曉。結果早就決定好了，動畫只是把它演出來
+      const won = json.prize as PrizeSnapshot;
+
       window.setTimeout(() => {
         setPhase('revealed');
+        playWinSound(isBig(won, prizes));
         navigator.vibrate?.([40, 60, 120]);
       }, SPIN_MS);
     } catch {
@@ -133,7 +162,8 @@ export function DrawFlow({
         一大片，看起來像沒載完
       */}
       <div className={phase === 'idle' ? 'flex flex-1 flex-col justify-center' : ''}>
-        <header className="mb-6 text-center">
+        <header className="relative mb-6 text-center">
+          {phase === 'idle' ? <SoundToggle /> : null}
           <p className="text-sm font-medium text-brand-600">
             {settings.shop_name || '消費抽獎'}
           </p>
@@ -192,6 +222,45 @@ export function DrawFlow({
         />
       ) : null}
     </Screen>
+  );
+}
+
+/**
+ * 靜音開關。
+ *
+ * 客人可能在安靜的場合開這一頁（辦公室、大眾運輸），突然發出聲音
+ * 會很尷尬。設定存在 localStorage，下次進來會記得。
+ */
+function SoundToggle() {
+  // localStorage 是瀏覽器才有的外部狀態。用 useSyncExternalStore 訂閱
+  // 才不會有伺服器渲染與客戶端不一致的問題，也不必在 effect 裡 setState
+  const on = useSyncExternalStore(
+    subscribeSound,
+    isSoundEnabled,
+    soundServerSnapshot,
+  );
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        const next = !on;
+        setSoundEnabled(next);
+        if (next) {
+          unlockAudio();
+          playSpinSound(); // 開啟時給一聲，讓客人知道音量大小
+        }
+      }}
+      aria-pressed={on}
+      aria-label={on ? '關閉音效' : '開啟音效'}
+      className="absolute top-0 right-0 cursor-pointer rounded-xl p-2 text-ink-faint transition-colors hover:bg-brand-50 hover:text-ink-soft focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+    >
+      {on ? (
+        <IconSound className="size-5" />
+      ) : (
+        <IconSoundOff className="size-5" />
+      )}
+    </button>
   );
 }
 

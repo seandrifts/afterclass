@@ -34,20 +34,25 @@ export function PrizeStrip({
   return (
     <section className="mt-6" aria-label="獎項一覽">
       <div className="rounded-card border-2 border-amber-300 bg-linear-to-br from-amber-50 to-brand-50 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="inline-flex items-center gap-1 text-xs font-bold text-amber-700">
-              <IconSparkle className="size-3.5" />
-              最大獎
-            </p>
-            <p className="mt-1 text-2xl font-black text-balance text-amber-700">
-              {top.name}
-            </p>
-          </div>
-          <span className="shrink-0 rounded-full bg-good px-3 py-1.5 text-sm font-black text-white">
+        {/*
+          徽章跟「最大獎」放同一行，讓獎項名稱獨佔整行。
+
+          原本兩者並排，中文沒有空格可斷，較長的獎項名稱會被擠成
+          「免單（下次 / 消費全免）」，斷在括號中間很難讀。
+        */}
+        <div className="flex items-center justify-between gap-2">
+          <p className="inline-flex items-center gap-1 text-xs font-bold text-amber-700">
+            <IconSparkle className="size-3.5" />
+            最大獎
+          </p>
+          <span className="shrink-0 rounded-full bg-good px-3 py-1 text-xs font-black text-white">
             100% 中獎
           </span>
         </div>
+
+        <p className="mt-2 text-2xl font-black text-balance text-amber-700">
+          {top.name}
+        </p>
       </div>
 
       {tiers.length > 0 ? (
