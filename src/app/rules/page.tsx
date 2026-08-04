@@ -67,7 +67,9 @@ export default async function RulesPage() {
         <h2 className="font-bold">回饋點數規則</h2>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-soft">
           <li>
-            · {settings.points_per_dollar} 點等值新台幣 1 元，僅供本店消費折抵
+            {settings.points_display_enabled
+              ? `· ${settings.points_per_dollar} 點等值新台幣 1 元，僅供本店消費折抵`
+              : '· 回饋金以新台幣計，僅供本店消費折抵'}
           </li>
           <li>· 點數不得轉讓、兌換現金、不找零</li>
           <li>

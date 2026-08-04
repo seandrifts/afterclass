@@ -84,7 +84,10 @@ export default async function WalletPage() {
         </p>
         <p className="mt-2 text-lg font-medium text-ink-soft">
           {settings.points_display_enabled ? '點' : '元'}
-          <span className="ml-2 text-base">可折抵 {user.balance} 元</span>
+          {/* 直接顯示元的時候，再寫一次「可折抵 N 元」是重複的 */}
+          {settings.points_display_enabled ? (
+            <span className="ml-2 text-base">可折抵 {user.balance} 元</span>
+          ) : null}
         </p>
 
         <ScanCard svg={qr} code={user.wallet_code} />

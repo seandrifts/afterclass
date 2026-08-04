@@ -412,17 +412,23 @@ function Outcome({
 
       {phase === 'claimed' && isCredit ? (
         <Card>
+          {/*
+            倍率只在「用點數顯示」時才乘。原本無條件乘上 points_per_dollar
+            但單位跟著開關切換，關掉點數顯示時會變成「10 元」而不是「1 元」
+          */}
           <div className="flex items-baseline justify-between">
             <span className="text-sm text-ink-soft">目前累積</span>
             <CountUp
-              from={before * settings.points_per_dollar}
-              to={shown * settings.points_per_dollar}
+              from={settings.points_display_enabled ? before * settings.points_per_dollar : before}
+              to={settings.points_display_enabled ? shown * settings.points_per_dollar : shown}
               suffix={settings.points_display_enabled ? ' 點' : ' 元'}
             />
           </div>
-          <p className="mt-1 text-right text-sm text-ink-soft">
-            可折抵 {shown} 元
-          </p>
+          {settings.points_display_enabled ? (
+            <p className="mt-1 text-right text-sm text-ink-soft">
+              可折抵 {shown} 元
+            </p>
+          ) : null}
 
           <div
             className="mt-4 h-3 overflow-hidden rounded-full bg-brand-100"
