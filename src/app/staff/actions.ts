@@ -16,6 +16,9 @@ import { loginStaff } from '@/lib/staff';
 import { db } from '@/lib/supabase';
 import { getUserByWalletCode } from '@/lib/users';
 
+/** 查詢時往回看幾分鐘，判斷是不是剛剛才折抵過 */
+const RECENT_REDEEM_MINUTES = 10;
+
 export async function loginAction(_prev: unknown, formData: FormData) {
   const staffId = String(formData.get('staffId') ?? '');
   const pin = String(formData.get('pin') ?? '');
@@ -70,6 +73,27 @@ export async function lookupAction(_prev: unknown, formData: FormData) {
 
   const settings = await getSettings();
 
+  /*
+    找出這位客人最近一次折抵。
+
+    實際會發生的情境：店員扣了 30 元，網路慢畫面沒更新，以為沒成功，
+    重新查詢再扣一次，客人就少了 60 元。
+
+    冪等鍵擋不住這個，因為那是全新的表單、全新的 key。只能在查詢時
+    把「幾分鐘前才剛扣過」講出來，讓店員自己判斷。
+  */
+  const since = new Date(Date.now() - RECENT_REDEEM_MINUTES * 60_000);
+
+  const { data: recent } = await db()
+    .from('balance_transactions')
+    .select('amount, created_at, staff:staff_id(name)')
+    .eq('user_id', user.id)
+    .eq('type', 'spend')
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   return {
     user: {
       id: user.id,
@@ -77,6 +101,20 @@ export async function lookupAction(_prev: unknown, formData: FormData) {
       balance: user.balance,
       maxRedeem: settings.max_redeem_per_visit,
       minBalance: settings.min_balance_to_redeem,
+      recentRedeem: recent
+        ? {
+            amount: Math.abs(recent.amount),
+            minutesAgo: Math.max(
+              0,
+              Math.round(
+                (Date.now() - new Date(recent.created_at).getTime()) / 60_000,
+              ),
+            ),
+            staffName:
+              (recent.staff as unknown as { name: string } | null)?.name ??
+              null,
+          }
+        : null,
     },
   };
 }

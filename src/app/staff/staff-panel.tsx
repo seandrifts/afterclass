@@ -11,6 +11,7 @@ import {
   undoAction,
 } from './actions';
 import {
+  IconAlert,
   IconCamera,
   IconCheck,
   IconUndo,
@@ -26,6 +27,11 @@ interface LookedUpUser {
   balance: number;
   maxRedeem: number;
   minBalance: number;
+  recentRedeem: {
+    amount: number;
+    minutesAgo: number;
+    staffName: string | null;
+  } | null;
 }
 
 export function StaffPanel({
@@ -257,6 +263,10 @@ function RedeemForm({
   const [amount, setAmount] = useState(usable);
   const [confirmRepeat, setConfirmRepeat] = useState(false);
 
+  // 剛折抵過的話，要店員先確認過才解鎖折抵鍵
+  const recent = user.recentRedeem;
+  const [acknowledged, setAcknowledged] = useState(!recent);
+
   // 冪等鍵在這筆折抵開始時就固定住。重送同一個 key 不會重複扣款，
   // 店員在收訊差的環境按了確認沒反應又按一次時就靠這個
   const [idemKey] = useState(() => crypto.randomUUID());
@@ -274,11 +284,51 @@ function RedeemForm({
         </p>
       </Card>
 
+      {/*
+        剛折抵過就擋一下。最常見的誤扣情境是店員以為上一次沒成功，
+        重新查詢又扣一次，客人平白少一筆錢。
+      */}
+      {recent && !acknowledged ? (
+        <div
+          role="alert"
+          className="rounded-card border-2 border-warn bg-amber-50 p-4 text-center"
+        >
+          <IconAlert className="mx-auto size-8 text-warn" />
+          <p className="mt-2 text-lg font-black text-warn">
+            這位客人剛折抵過
+          </p>
+          <p className="mt-1 text-sm text-pretty text-ink-soft">
+            {recent.minutesAgo === 0
+              ? '不到 1 分鐘前'
+              : `${recent.minutesAgo} 分鐘前`}
+            已折抵 <strong className="text-ink">{recent.amount} 元</strong>
+            {recent.staffName ? `（${recent.staffName}）` : ''}。
+            確認不是重複操作再繼續。
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="min-h-14 cursor-pointer rounded-xl border-2 border-line bg-raised font-bold transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={() => setAcknowledged(true)}
+              className="min-h-14 cursor-pointer rounded-xl bg-warn font-bold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300"
+            >
+              確認要再折抵
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <input type="hidden" name="userId" value={user.id} />
       <input type="hidden" name="idempotencyKey" value={idemKey} />
       <input type="hidden" name="amount" value={amount} />
 
-      <Card>
+      <Card className={acknowledged ? '' : 'pointer-events-none opacity-40'}>
         <p className="text-sm font-bold text-ink-soft">本次折抵</p>
         <p className="tabular my-3 text-center text-5xl font-black">
           {amount}
@@ -323,7 +373,7 @@ function RedeemForm({
         <Button
           type={confirmRepeat ? 'submit' : 'button'}
           size="lg"
-          disabled={pending || amount <= 0}
+          disabled={pending || amount <= 0 || !acknowledged}
           onClick={confirmRepeat ? undefined : () => setConfirmRepeat(true)}
         >
           {pending
