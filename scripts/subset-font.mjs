@@ -79,6 +79,71 @@ const NAMES = `
 for (const ch of RUNTIME) used.add(ch);
 for (const ch of NAMES) used.add(ch);
 
+/*
+  老闆在後台設定的文字。
+
+  店名出現在每一頁最上方，獎項名稱印在轉盤上，兩者都存在資料庫裡，
+  掃原始碼看不到。漏掉的話那幾個字會落到 ext —— 也就是每個客人、
+  每次開頁都為了店名去下載 1.7 MB。
+
+  「下課後點心坊」就是這樣，「課」和「坊」不在 core，六個字用了兩種
+  字型。
+
+  連不上資料庫時就跳過，只是少收幾個字，不該讓裁切整個失敗。
+*/
+async function shopVocabulary() {
+  const envFile = '.env.local';
+  const env = {};
+  try {
+    for (const line of readFileSync(envFile, 'utf8').split('\n')) {
+      const m = line.match(/^([A-Z_]+)=(.*)$/);
+      if (m) env[m[1]] = m[2].trim();
+    }
+  } catch {
+    return '';
+  }
+
+  const url = env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return '';
+
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const db = createClient(url, key, { auth: { persistSession: false } });
+    const [settings, prizes] = await Promise.all([
+      db
+        .from('settings')
+        .select('shop_name, paused_reason, rules_content')
+        .eq('id', 1)
+        .maybeSingle(),
+      db.from('prizes').select('name, terms'),
+    ]);
+    if (settings.error || prizes.error) {
+      // 欄位名打錯之類的問題要講出來，不然會安靜地少收一堆字
+      console.warn(
+        `  讀不到後台文字：${(settings.error ?? prizes.error).message}`,
+      );
+      return '';
+    }
+    return [
+      settings.data?.shop_name ?? '',
+      settings.data?.paused_reason ?? '',
+      settings.data?.rules_content ?? '',
+      ...(prizes.data ?? []).flatMap((p) => [p.name ?? '', p.terms ?? '']),
+    ].join('');
+  } catch {
+    return '';
+  }
+}
+
+const shopText = await shopVocabulary();
+for (const ch of shopText) used.add(ch);
+console.log(
+  shopText
+    ? `已納入後台設定的店名與獎項名稱（${new Set(shopText).size} 個相異字）`
+    : '（連不上資料庫，這次沒納入店名與獎項名稱）',
+);
+
 // ---------------------------------------------------------------
 // 2. 常用漢字。動態內容（客人暱稱、老闆打的獎項名稱）會用到這些
 // ---------------------------------------------------------------

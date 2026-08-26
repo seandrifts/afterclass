@@ -39,11 +39,24 @@ export const kanzimi = localFont({
   display: 'swap',
   // 系統字的量測基準，減少字型切換時的版面跳動
   adjustFontFallback: 'Arial',
-  fallback: [
-    'PingFang TC',
-    'Hiragino Sans CNS',
-    'Noto Sans TC',
-    'Microsoft JhengHei',
-    'sans-serif',
-  ],
+  /*
+    這裡刻意不給 fallback。
+
+    localFont 的 fallback 會把整串接在 --font-kanzimi 裡面，而
+    globals.css 是這樣寫的：
+
+      --font-sans: var(--font-kanzimi), 'Kanzimi Ext', 'PingFang TC', …
+
+    一展開就變成
+
+      kanzimi, kanzimi Fallback, PingFang TC, …, sans-serif, Kanzimi Ext, …
+
+    sans-serif 是永遠匹配的通用字族，排在它後面的 Kanzimi Ext 永遠
+    輪不到。結果 core 沒有的字（例如店名裡的「課」「坊」）直接被
+    PingFang 接走，同一個店名六個字有兩種字型，而那 1.7 MB 的 ext
+    從頭到尾沒被下載過。
+
+    完整的字型順序統一由 globals.css 的 --font-sans 決定，這裡只負責
+    提供字檔本身。
+  */
 });
