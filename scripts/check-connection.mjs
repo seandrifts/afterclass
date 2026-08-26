@@ -162,7 +162,19 @@ if (integrity.error) {
     '有人繞過流水帳直接改了餘額。這是最高優先級的問題',
   );
 } else {
-  ok('餘額與流水帳一致', '（目前 0 筆交易，正常）');
+  /*
+    這裡本來寫死「目前 0 筆交易」。剛上線時是對的，之後就一直印著
+    同一句話，等於自我檢查在報一個過期的斷言 —— 而自我檢查印出來的
+    東西是拿來當判斷依據的，錯的比沒有更糟。改成每次真的去數。
+  */
+  const ledger = await db
+    .from('balance_transactions')
+    .select('id', { head: true, count: 'exact' });
+
+  ok(
+    '餘額與流水帳一致',
+    ledger.error ? '' : `目前 ${ledger.count} 筆交易`,
+  );
 }
 
 console.log('\n[6] 活動狀態');
