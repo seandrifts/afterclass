@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type CSSProperties,
   useCallback,
   useEffect,
   useRef,
@@ -33,13 +34,39 @@ import type { Prize, PrizeSnapshot, Settings } from '@/lib/types';
 type Phase =
   | 'idle'
   | 'spinning'
+  | 'landing'
   | 'revealed'
   | 'claiming'
   | 'claimed'
   | 'error';
 
-const REEL_LOOPS = 6;
-const SPIN_MS = 3200;
+/*
+  轉軸分成兩段：spinning 是還不知道結果的空轉，landing 是知道了之後
+  減速到定位。
+
+  一開始是一段式的：按下去就朝著落點滑過去。但那時候 API 還沒回來，
+  落點只能先給預設值 0，而排序第一的正好是最大獎，客人就會看到轉軸
+  慢慢停在「免單」上，等結果回來才硬跳成真正抽中的獎。中了又被抽走
+  是最傷的觀感，寧可多轉半秒也不能發生。
+*/
+const ITEM_H = 132;
+const SPIN_MIN_MS = 900; // 最短空轉。網路太快時也要有「真的在轉」的感覺
+const SPIN_SET_MS = 520; // 空轉繞完一圈的時間，決定等速階段的速度
+const LAND_MS = 2200; // 減速到定位
+const LAND_MIN_LOOPS = 3; // 減速期間至少再繞幾圈，才有慣性
+
+/*
+  減速曲線。
+
+  重點不只是「慢下來」，而是**整段的最高速度不能超過空轉速度太多**，
+  否則交棒的瞬間會突然衝一下。之前用 (0.16, 0.84, 0.24, 1)，起始速度
+  是平均的 5.25 倍，換算成畫面就是空轉 34px/幀、一交棒變成 142px/幀，
+  很明顯的頓挫。
+
+  這條的峰值是平均的 1.36 倍（約 37px/幀），接得上空轉；而且九成九的
+  距離在 2030ms 就走完，最後那一點只花 170ms，不會有停不下來的拖尾。
+*/
+const LAND_EASE = 'cubic-bezier(0.33, 0.4, 0.66, 1)';
 
 export function DrawFlow({
   code,
@@ -86,21 +113,29 @@ export function DrawFlow({
         return;
       }
 
+      // 拿到結果才給落點，轉軸這時候才開始減速。揭曉由 Reel 在
+      // 減速結束時回呼，兩者用同一個時間軸，不會各算各的
       setPrize(json.prize as PrizeSnapshot);
-
-      // 等轉盤停下來才揭曉。結果早就決定好了，動畫只是把它演出來
-      const won = json.prize as PrizeSnapshot;
-
-      window.setTimeout(() => {
-        setPhase('revealed');
-        playWinSound(isBig(won, prizes));
-        navigator.vibrate?.([40, 60, 120]);
-      }, SPIN_MS);
+      setPhase('landing');
     } catch {
       setPhase('error');
       setMessage('連線不穩，請確認網路後再試一次。');
     }
   }
+
+  /*
+    轉軸停穩的那一刻才揭曉。
+
+    聲音、震動、文案都掛在這裡，跟畫面用同一個時間軸。之前是各自
+    setTimeout，網路慢的時候動畫還在跑就先響了。
+  */
+  const handleLanded = useCallback(() => {
+    setPhase('revealed');
+    if (prize) {
+      playWinSound(isBig(prize, prizes));
+      navigator.vibrate?.([40, 60, 120]);
+    }
+  }, [prize, prizes]);
 
   const claim = useCallback(async () => {
     setPhase('claiming');
@@ -152,7 +187,8 @@ export function DrawFlow({
     );
   }
 
-  const revealed = phase !== 'idle' && phase !== 'spinning';
+  const spinning = phase === 'spinning' || phase === 'landing';
+  const revealed = phase !== 'idle' && !spinning;
   const isBigWin = prize ? isBig(prize, prizes) : false;
 
   return (
@@ -169,7 +205,7 @@ export function DrawFlow({
           </p>
           <h1 className="mt-1 text-3xl font-black tracking-tight text-balance">
             {phase === 'idle' ? '來抽一次吧' : null}
-            {phase === 'spinning' ? '抽獎中' : null}
+            {spinning ? '抽獎中' : null}
             {phase === 'revealed' || phase === 'claiming' ? '恭喜！' : null}
             {phase === 'claimed' ? '已存進你的帳戶' : null}
           </h1>
@@ -178,9 +214,12 @@ export function DrawFlow({
         <Reel
           prizes={prizes}
           target={prize}
-          spinning={phase === 'spinning'}
-          revealed={revealed}
+          spinning={spinning}
+          landing={phase === 'landing'}
+          settled={revealed}
+          instant={alreadyDrawn !== null}
           celebrate={revealed && isBigWin}
+          onLanded={handleLanded}
         />
 
         {phase === 'idle' ? (
@@ -199,7 +238,7 @@ export function DrawFlow({
           </>
         ) : null}
 
-        {phase === 'spinning' ? (
+        {spinning ? (
           <p
             className="mt-8 text-center text-ink-soft"
             role="status"
@@ -284,35 +323,122 @@ function isBig(prize: PrizeSnapshot, prizes: Prize[]): boolean {
 /**
  * 轉軸動畫。
  *
- * 結果早就由後端決定了，這裡只負責把它演出來。用單純的 CSS transform
- * 搭配 ease-out 曲線，比 canvas 轉盤輕量，在老舊手機上也順。
+ * 結果由後端決定，這裡只負責演出來。關鍵是分兩段：
+ *
+ *   spinning  還不知道結果，等速空轉，沒有落點
+ *   landing   結果到了，從當下位置減速滑到該停的地方
+ *
+ * 兩段之間要接得看不出來。移除 CSS 動畫的瞬間元素會彈回原點，所以
+ * 交棒時先把動畫當下的位置讀出來寫成 inline transform，強制回流之後
+ * 再開始過渡，這樣起點就是眼睛看到的位置。
  */
 function Reel({
   prizes,
   target,
   spinning,
-  revealed,
+  landing,
+  settled,
+  instant,
   celebrate,
+  onLanded,
 }: {
   prizes: Prize[];
   target: PrizeSnapshot | null;
   spinning: boolean;
-  revealed: boolean;
+  landing: boolean;
+  settled: boolean;
+  /** 重新整理回到已抽過的頁面。直接定位，不重演一次 */
+  instant: boolean;
   celebrate: boolean;
+  onLanded: () => void;
 }) {
-  // 原本 88px 看起來像一個輸入欄位，不像抽獎機。加高之後才有「機台」的份量
-  const itemHeight = 132;
-  const targetIndex = target
+  const stripRef = useRef<HTMLDivElement>(null);
+  const spinStart = useRef<number | null>(null);
+
+  const found = target
     ? prizes.findIndex((p) => p.id === target.prize_id)
-    : 0;
-  const landing = targetIndex >= 0 ? targetIndex : 0;
+    : -1;
+  const landIndex = found >= 0 ? found : 0;
 
-  const offset =
-    spinning || revealed
-      ? (REEL_LOOPS * prizes.length + landing) * itemHeight
-      : 0;
+  // 空轉一圈的距離。keyframe 靠這個值算，跑完接回開頭剛好無縫
+  const setHeight = prizes.length * ITEM_H;
 
-  const loops = Array.from({ length: REEL_LOOPS + 2 }, (_, i) => i);
+  useEffect(() => {
+    if (spinning && spinStart.current === null) {
+      spinStart.current = performance.now();
+    }
+  }, [spinning]);
+
+  useEffect(() => {
+    if (!landing || !target) return;
+    const el = stripRef.current;
+    if (!el) return;
+
+    // 網路快的時候結果幾乎立刻回來，這時要讓它多轉一下，
+    // 不然按下去就停等於沒有抽的過程
+    const elapsed = performance.now() - (spinStart.current ?? performance.now());
+    const wait = Math.max(0, SPIN_MIN_MS - elapsed);
+
+    let settle = 0;
+    const start = window.setTimeout(() => {
+      // 空轉動畫此刻把元素帶到哪裡。不接手的話移除動畫會彈回 0
+      const raw = getComputedStyle(el).transform;
+      const at = raw && raw !== 'none' ? new DOMMatrixReadOnly(raw).m42 : 0;
+
+      el.style.animation = 'none';
+      el.style.transform = `translateY(${at}px)`;
+      void el.offsetHeight; // 強制回流，讓上一行成為過渡的起點
+
+      /*
+        落點要往前找，不能寫死。
+
+        寫死圈數的話，滑行距離會隨著「交棒時剛好轉到哪」以及抽中第幾
+        個獎項而差到一整圈，同樣的 2.2 秒有時要滑 2100px 有時 4100px，
+        速度差一倍，快慢不一致。
+
+        改成從目前位置往前推至少三圈，再往上取到最近一個對得上落點的
+        位置，滑行距離就穩定落在三到四圈之間。
+      */
+      const set = prizes.length * ITEM_H;
+      const least = Math.abs(at) + LAND_MIN_LOOPS * set;
+      const loops = Math.ceil((least - landIndex * ITEM_H) / set);
+      const final = loops * set + landIndex * ITEM_H;
+
+      el.style.transition = `transform ${LAND_MS}ms ${LAND_EASE}`;
+      el.style.transform = `translateY(-${final}px)`;
+
+      settle = window.setTimeout(onLanded, LAND_MS);
+    }, wait);
+
+    return () => {
+      window.clearTimeout(start);
+      window.clearTimeout(settle);
+    };
+  }, [landing, target, landIndex, prizes.length, onLanded]);
+
+  /*
+    交棒之後 transform 由上面的 effect 直接寫在元素上，React 不能再碰，
+    否則會把減速中的位置蓋掉。所以這裡只在「從未轉過」的情況給 transform。
+  */
+  const style: CSSProperties = instant
+    ? { transform: `translateY(-${landIndex * ITEM_H}px)` }
+    : ({
+        '--reel-set': `-${setHeight}px`,
+        // 空轉速度寫在這裡，跟 SPIN_SET_MS 同一個來源。
+        // 減速曲線是照這個速度配的，兩邊分開寫遲早會對不上
+        ...(spinning
+          ? { animation: `reel-spin ${SPIN_SET_MS}ms linear infinite` }
+          : {}),
+      } as CSSProperties);
+
+  /*
+    要備幾組才夠滑。
+
+    交棒時最多已經走掉一整組，再往前推三組、往上取整最多又是一組，
+    所以終點最遠不超過五組；加一組讓終點那格底下還有東西，不會滑到
+    空白。
+  */
+  const sets = Array.from({ length: LAND_MIN_LOOPS + 3 }, (_, i) => i);
 
   return (
     <div className="relative">
@@ -326,25 +452,21 @@ function Reel({
       >
         <div
           className="relative overflow-hidden rounded-2xl bg-raised"
-          style={{ height: itemHeight }}
+          style={{ height: ITEM_H }}
           aria-live="polite"
-          aria-label={revealed && target ? `抽中 ${target.name}` : '抽獎轉盤'}
+          aria-label={settled && target ? `抽中 ${target.name}` : '抽獎轉盤'}
         >
           <div
+            ref={stripRef}
             className="will-change-transform"
-            style={{
-              transform: `translateY(-${offset}px)`,
-              transition: spinning
-                ? `transform ${SPIN_MS}ms cubic-bezier(0.12, 0.75, 0.18, 1)`
-                : 'none',
-            }}
+            style={style}
           >
-            {loops.map((loop) =>
+            {sets.map((set) =>
               prizes.map((p) => (
                 <div
-                  key={`${loop}-${p.id}`}
+                  key={`${set}-${p.id}`}
                   className="flex items-center justify-center px-4 text-center font-black"
-                  style={{ height: itemHeight, color: p.color ?? undefined }}
+                  style={{ height: ITEM_H, color: p.color ?? undefined }}
                 >
                   <span className="text-3xl text-balance">{p.name}</span>
                 </div>
@@ -353,7 +475,7 @@ function Reel({
           </div>
 
           {/* 沒抽之前遮一層，避免客人先看到獎項排列去猜順序 */}
-          {!spinning && !revealed ? (
+          {!spinning && !settled ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-brand-50">
               <IconGift className="size-10 text-brand-400" />
               <span className="text-4xl font-black tracking-[0.25em] text-brand-500">

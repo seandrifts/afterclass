@@ -53,6 +53,24 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+  轉軸空轉。
+
+  等速、無限循環，跑完剛好一組獎項的高度，所以接回開頭時畫面完全
+  一樣，看不出接縫。等 API 回來才交棒給減速動畫。
+
+  重點是空轉期間「沒有落點」—— 結果還沒回來就先滑向某個獎項的話，
+  客人會先看到那個獎再被換掉。
+*/
+@keyframes reel-spin {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(var(--reel-set));
+  }
+}
+
 /* 大獎的紙屑。純 CSS，不為了這個效果引入動畫函式庫 */
 @keyframes confetti {
   0% {
