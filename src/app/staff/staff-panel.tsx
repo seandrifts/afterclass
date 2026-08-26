@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 
 import {
   issueTokenAction,
@@ -17,6 +17,11 @@ import {
   IconUndo,
 } from '@/components/icons';
 import { ScanInput } from '@/components/qr-scanner';
+import {
+  playErrorSound,
+  playRedeemSuccessSound,
+  unlockAudio,
+} from '@/lib/sound';
 import { Button, Card } from '@/components/ui';
 
 type Tab = 'redeem' | 'coupon' | 'issue';
@@ -153,6 +158,26 @@ function RedeemTab() {
 
   const user = lookup && 'user' in lookup ? (lookup.user as LookedUpUser) : null;
   const success = redeem && 'success' in redeem ? redeem.success : null;
+  const redeemError = redeem && 'error' in redeem ? redeem.error : null;
+
+  /*
+    折抵結果的聲音回饋。
+
+    店員在尖峰時段手上在處理食物或找零，眼睛不一定看著螢幕。
+    一聲確認音讓他知道扣款成功，不用低頭確認。
+
+    用 ref 記住已經播過的結果，避免 React 重繪時重複發聲。
+  */
+  const announced = useRef<string | null>(null);
+
+  useEffect(() => {
+    const key = success ? `ok:${success.txnId}` : redeemError ? `err:${redeemError}` : null;
+    if (!key || announced.current === key) return;
+
+    announced.current = key;
+    if (success) playRedeemSuccessSound();
+    else playErrorSound();
+  }, [success, redeemError]);
 
   if (success && !undo?.undone) {
     return (
@@ -226,7 +251,12 @@ function RedeemTab() {
           </p>
         ) : null}
 
-        <Button type="submit" size="lg" loading={looking}>
+        <Button
+          type="submit"
+          size="lg"
+          loading={looking}
+          onClick={unlockAudio}
+        >
           {looking ? '查詢中' : '查詢餘額'}
         </Button>
       </form>
@@ -403,6 +433,22 @@ function RedeemForm({
 function CouponTab() {
   const [state, action, pending] = useActionState(redeemCouponAction, null);
   const success = state && 'couponSuccess' in state ? state.couponSuccess : null;
+  const couponError = state && 'error' in state ? state.error : null;
+
+  const announced = useRef<string | null>(null);
+
+  useEffect(() => {
+    const key = success
+      ? `ok:${success.prizeName}`
+      : couponError
+        ? `err:${couponError}`
+        : null;
+    if (!key || announced.current === key) return;
+
+    announced.current = key;
+    if (success) playRedeemSuccessSound();
+    else playErrorSound();
+  }, [success, couponError]);
 
   if (success) {
     return (
@@ -439,7 +485,7 @@ function CouponTab() {
         </p>
       ) : null}
 
-      <Button type="submit" size="lg" loading={pending}>
+      <Button type="submit" size="lg" loading={pending} onClick={unlockAudio}>
         {pending ? '核銷中' : '核銷'}
       </Button>
     </form>

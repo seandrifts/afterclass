@@ -15,10 +15,19 @@ const TYPE_LABELS: Record<string, string> = {
 
 export function CreditBoard({
   ledger,
+  query,
+  matchedUsers,
   warnDays,
   summary,
 }: {
   ledger: LedgerRow[];
+  query: string;
+  matchedUsers: {
+    id: string;
+    display_name: string | null;
+    wallet_code: string;
+    balance: number;
+  }[];
   warnDays: number;
   summary: {
     outstanding: number;
@@ -79,8 +88,69 @@ export function CreditBoard({
         </p>
       </Card>
 
+      {/*
+        查單一客人的紀錄。客訴處理時這是最常用的功能：
+        「某位客人說他的點數不見了」要能立刻把他的完整進出調出來。
+      */}
+      <Card>
+        <form method="get" className="flex flex-wrap items-end gap-3">
+          <label className="block flex-1">
+            <span className="text-sm font-bold text-ink-soft">
+              查客人的點數紀錄
+            </span>
+            <input
+              name="q"
+              defaultValue={query}
+              placeholder="會員碼或姓名"
+              className="mt-1 w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+            />
+          </label>
+          <button
+            type="submit"
+            className="cursor-pointer rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+          >
+            查詢
+          </button>
+          {query ? (
+            <a
+              href="/admin/credits"
+              className="cursor-pointer rounded-xl border border-line px-5 py-2.5 text-sm font-bold transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+            >
+              清除
+            </a>
+          ) : null}
+        </form>
+
+        {query ? (
+          matchedUsers.length === 0 ? (
+            <p className="mt-4 text-sm text-bad">
+              查不到符合「{query}」的客人
+            </p>
+          ) : (
+            <ul className="mt-4 space-y-2">
+              {matchedUsers.map((u) => (
+                <li
+                  key={u.id}
+                  className="flex items-center justify-between rounded-xl bg-brand-50 px-4 py-2 text-sm"
+                >
+                  <span>
+                    <strong>{u.display_name ?? '（無名）'}</strong>
+                    <span className="ml-2 font-mono text-xs text-ink-faint">
+                      {u.wallet_code}
+                    </span>
+                  </span>
+                  <span className="tabular font-bold">目前 {u.balance} 元</span>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : null}
+      </Card>
+
       <section>
-        <h2 className="mb-3 text-sm font-bold text-ink-soft">流水帳</h2>
+        <h2 className="mb-3 text-sm font-bold text-ink-soft">
+          {query ? `「${query}」的流水帳` : '流水帳'}
+        </h2>
 
         {/* 手機：卡片。表格橫向捲動會讓「金額」跟「異動後」看不到 */}
         <ul className="space-y-2 md:hidden">
@@ -129,7 +199,7 @@ export function CreditBoard({
           ))}
           {ledger.length === 0 ? (
             <li className="rounded-card border border-line bg-raised py-10 text-center text-sm text-ink-soft">
-              還沒有任何流水紀錄
+              {query ? '這位客人還沒有任何紀錄' : '還沒有任何流水紀錄'}
             </li>
           ) : null}
         </ul>

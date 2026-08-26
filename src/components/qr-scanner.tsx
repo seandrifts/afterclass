@@ -3,18 +3,26 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { IconCamera, IconKeyboard } from './icons';
+import { playScanSound } from '@/lib/sound';
 import { Spinner } from './ui';
 
 type State = 'idle' | 'starting' | 'scanning' | 'denied' | 'unsupported';
 
 /**
- * 掃碼輸入。
+ * 掃碼輸入。同時支援三種方式：
  *
- * 尖峰時段店員手動輸入 10 碼會員碼大約要 10 秒，掃描只要 2 秒。
- * 一小時出 60 碗麵的店，這個差距是真的會塞住結帳動線的。
+ * 1. 條碼槍 / 掃描器（USB 或藍牙）
+ *    這類裝置在作業系統眼中就是一個鍵盤，掃到之後把內容「打」出來
+ *    再送出一個 Enter。所以只要輸入框保持焦點就能直接用，不需要
+ *    任何驅動或設定。輸入框預設 autofocus，送出後也會自動搶回焦點，
+ *    店員可以連續掃下一位客人而不用碰螢幕。
  *
- * 但相機不是永遠可用：權限被拒、桌機沒鏡頭、iOS 在非 HTTPS 下
- * 直接不給用。所以手動輸入永遠保留，不是備援而是對等的選項。
+ * 2. 手機相機
+ *    尖峰時段店員手動輸入 10 碼會員碼大約要 10 秒，掃描只要 2 秒。
+ *
+ * 3. 手動輸入
+ *    權限被拒、桌機沒鏡頭、iOS 在非 HTTPS 下直接不給用。
+ *    手動輸入永遠保留，不是備援而是對等的選項。
  */
 export function ScanInput({
   name,
@@ -40,7 +48,7 @@ export function ScanInput({
   const scannerRef = useRef<{ stop: () => void; destroy: () => void } | null>(
     null,
   );
-  const formRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // 元件卸載時務必關掉相機，否則手機上的鏡頭指示燈會一直亮著
   useEffect(() => {
@@ -60,7 +68,7 @@ export function ScanInput({
 
       if (!(await QrScanner.hasCamera())) {
         setState('unsupported');
-        setHint('這台裝置找不到可用的相機，請用手動輸入。');
+        setHint('這台裝置找不到可用的相機，請用條碼槍或手動輸入。');
         return;
       }
 
@@ -75,14 +83,12 @@ export function ScanInput({
           scanner.stop();
           setState('idle');
 
-          // 掃到就震一下。店員在吵雜環境看不到也聽不到提示音
+          // 掃到就震一下並嗶一聲。店員在吵雜環境看不到也聽不到螢幕變化
           navigator.vibrate?.(60);
+          playScanSound();
 
           if (autoSubmit) {
-            // 等 React 把值寫進 input 再送出
-            requestAnimationFrame(() =>
-              formRef.current?.form?.requestSubmit(),
-            );
+            requestAnimationFrame(() => inputRef.current?.form?.requestSubmit());
           }
         },
         {
@@ -104,8 +110,8 @@ export function ScanInput({
       setState(denied ? 'denied' : 'unsupported');
       setHint(
         denied
-          ? '相機權限被拒絕。到瀏覽器的網站設定允許相機，或直接用手動輸入。'
-          : '相機啟動失敗，請用手動輸入。',
+          ? '相機權限被拒絕。到瀏覽器的網站設定允許相機，或用條碼槍與手動輸入。'
+          : '相機啟動失敗，請用條碼槍或手動輸入。',
       );
     }
   }
@@ -113,6 +119,7 @@ export function ScanInput({
   function stop() {
     scannerRef.current?.stop();
     setState('idle');
+    inputRef.current?.focus();
   }
 
   const scanning = state === 'scanning' || state === 'starting';
@@ -127,6 +134,9 @@ export function ScanInput({
         <button
           type="button"
           onClick={scanning ? stop : start}
+          // 條碼槍會把按鍵送到目前焦點的元素。這顆按鈕不該搶走焦點，
+          // 否則掃出來的字元就落在按鈕上而不是輸入框
+          tabIndex={-1}
           className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-bold text-brand-600 transition-colors duration-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
         >
           {scanning ? (
@@ -137,7 +147,7 @@ export function ScanInput({
           ) : (
             <>
               <IconCamera className="size-4" />
-              掃描 QR
+              用相機掃描
             </>
           )}
         </button>
@@ -169,13 +179,27 @@ export function ScanInput({
       </div>
 
       <input
-        ref={formRef}
+        ref={inputRef}
         id={name}
         name={name}
         value={value}
-        onChange={(e) =>
-          setValue(numeric ? e.target.value.replace(/\D/g, '') : e.target.value)
-        }
+        // 條碼槍靠這個接收按鍵。沒有 autofocus 的話掃出來的字元會落空
+        autoFocus
+        onChange={(e) => {
+          const raw = e.target.value;
+          // 有些條碼槍會在結尾補上換行而不是送 Enter，一併清掉
+          const cleaned = numeric
+            ? raw.replace(/\D/g, '')
+            : raw.replace(/[\r\n\t]/g, '');
+          setValue(cleaned);
+        }}
+        onKeyDown={(e) => {
+          // 部分機型送的是 Tab 而不是 Enter，兩種都當成「掃完了」
+          if (e.key === 'Tab' && value.length > 0 && autoSubmit) {
+            e.preventDefault();
+            inputRef.current?.form?.requestSubmit();
+          }
+        }}
         inputMode={numeric ? 'numeric' : 'text'}
         maxLength={maxLength}
         autoComplete="off"
@@ -187,6 +211,10 @@ export function ScanInput({
       />
 
       {hint ? <p className="text-sm text-warn">{hint}</p> : null}
+
+      <p className="text-center text-xs text-ink-faint">
+        可用條碼槍直接掃描，或按上方按鈕用相機
+      </p>
     </div>
   );
 }
@@ -211,42 +239,4 @@ function extractCode(raw: string): string {
   }
 
   return trimmed;
-}
-
-/** 給不需要掃描的地方用的一般輸入框，樣式與 ScanInput 一致 */
-export function CodeInput({
-  name,
-  label,
-  placeholder,
-  numeric = false,
-  maxLength,
-  autoFocus,
-}: {
-  name: string;
-  label: string;
-  placeholder?: string;
-  numeric?: boolean;
-  maxLength?: number;
-  autoFocus?: boolean;
-}) {
-  return (
-    <div className="space-y-2">
-      <label htmlFor={name} className="text-sm font-bold text-ink-soft">
-        {label}
-      </label>
-      <input
-        id={name}
-        name={name}
-        autoFocus={autoFocus}
-        inputMode={numeric ? 'numeric' : 'text'}
-        maxLength={maxLength}
-        autoComplete="off"
-        autoCapitalize="characters"
-        placeholder={placeholder}
-        className={`tabular w-full rounded-xl border-2 border-line px-4 py-4 text-center font-bold uppercase transition-colors duration-200 focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 ${
-          numeric ? 'text-3xl tracking-[0.3em]' : 'text-2xl tracking-widest'
-        }`}
-      />
-    </div>
-  );
 }

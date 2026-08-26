@@ -125,6 +125,43 @@ export function playWinSound(big = false) {
   }
 }
 
+/**
+ * 店員端的操作回饋音。
+ *
+ * 這比客人端的音效更實用：店員在尖峰時段手上在處理食物或找零，
+ * 眼睛不一定看著螢幕。一聲確認音讓他知道扣款成功了，不用低頭確認。
+ *
+ * 成功是兩顆上行音（明確、短促），失敗是兩顆下行低音（不刺耳但聽得出不對）。
+ */
+export function playRedeemSuccessSound() {
+  if (!isSoundEnabled()) return;
+  unlockAudio();
+  if (!ctx || ctx.state !== 'running') return;
+
+  const now = ctx.currentTime;
+  tone(ctx, 880, now, 0.1, 0.13); // A5
+  tone(ctx, 1174.66, now + 0.09, 0.22, 0.13); // D6
+}
+
+export function playErrorSound() {
+  if (!isSoundEnabled()) return;
+  unlockAudio();
+  if (!ctx || ctx.state !== 'running') return;
+
+  const now = ctx.currentTime;
+  tone(ctx, 330, now, 0.14, 0.11); // E4
+  tone(ctx, 247, now + 0.13, 0.26, 0.11); // B3
+}
+
+/** 掃到碼的短促提示，讓店員知道讀取成功 */
+export function playScanSound() {
+  if (!isSoundEnabled()) return;
+  unlockAudio();
+  if (!ctx || ctx.state !== 'running') return;
+
+  tone(ctx, 1567.98, ctx.currentTime, 0.07, 0.08); // G6
+}
+
 /** 轉盤開始轉的提示音，很輕的一聲 */
 export function playSpinSound() {
   if (!isSoundEnabled()) return;

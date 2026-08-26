@@ -15,16 +15,52 @@ export interface LedgerRow {
   staff: { name: string } | null;
 }
 
-export default async function CreditsPage() {
+export default async function CreditsPage(
+  props: PageProps<'/admin/credits'>,
+) {
   const settings = await getSettings();
 
-  const { data: ledger } = await db()
+  const params = await props.searchParams;
+  const query = (typeof params.q === 'string' ? params.q : '').trim();
+
+  /*
+    查單一客人的紀錄。
+
+    原本只有全站流水一長串，要查「某位客人的點數怎麼變成這樣」
+    得自己往下捲著找。客訴處理時這是最常用的功能。
+
+    支援會員碼與姓名，兩者都用模糊比對。
+  */
+  let matchedUserIds: string[] | null = null;
+  let matchedUsers: { id: string; display_name: string | null; wallet_code: string; balance: number }[] = [];
+
+  if (query) {
+    const { data: found } = await db()
+      .from('users')
+      .select('id, display_name, wallet_code, balance')
+      .or(`wallet_code.ilike.%${query}%,display_name.ilike.%${query}%`)
+      .limit(20);
+
+    matchedUsers = found ?? [];
+    matchedUserIds = matchedUsers.map((u) => u.id);
+  }
+
+  let ledgerQuery = db()
     .from('balance_transactions')
     .select(
       'id, created_at, type, amount, balance_after, note, users(display_name, wallet_code), staff(name)',
     )
-    .order('created_at', { ascending: false })
-    .limit(100);
+    .order('created_at', { ascending: false });
+
+  if (matchedUserIds) {
+    // 查不到人的時候要回傳空清單，不能退回全站資料
+    ledgerQuery = ledgerQuery.in(
+      'user_id',
+      matchedUserIds.length > 0 ? matchedUserIds : ['00000000-0000-0000-0000-000000000000'],
+    );
+  }
+
+  const { data: ledger } = await ledgerQuery.limit(query ? 300 : 100);
 
   const warnCutoff = new Date();
   warnCutoff.setDate(warnCutoff.getDate() + settings.expire_warn_days);
@@ -54,6 +90,8 @@ export default async function CreditsPage() {
   return (
     <CreditBoard
       ledger={(ledger ?? []) as unknown as LedgerRow[]}
+      query={query}
+      matchedUsers={matchedUsers}
       warnDays={settings.expire_warn_days}
       summary={{
         outstanding: sum(all.data),
