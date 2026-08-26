@@ -108,8 +108,8 @@ export function PrizeBoard({
                     <span className="truncate">{p.name}</span>
                   </p>
                   <p className="mt-0.5 text-xs text-ink-soft">
-                    {TYPE_LABELS[p.type]} · 面額 {p.face_value} · 成本 {p.cost}
-                    {p.is_active ? '' : ' · 已停用'}
+                    {TYPE_LABELS[p.type]} ‧ 面額 {p.face_value} ‧ 成本 {p.cost}
+                    {p.is_active ? '' : ' ‧ 已停用'}
                   </p>
                 </div>
                 <button
@@ -156,7 +156,7 @@ export function PrizeBoard({
           <div className="flex items-center justify-between font-black">
             <span>合計</span>
             <span className="tabular">
-              權重 {totalWeight} · 100.00% · {calc.nominal.toFixed(2)}
+              權重 {totalWeight} ‧ 100.00% ‧ {calc.nominal.toFixed(2)}
             </span>
           </div>
         </li>
@@ -277,7 +277,7 @@ export function PrizeBoard({
           <ul className="mt-3 space-y-1 text-xs text-ink-faint">
             {changes.map((c) => (
               <li key={c.id}>
-                {new Date(c.created_at).toLocaleString('zh-TW')} ·{' '}
+                {new Date(c.created_at).toLocaleString('zh-TW')} ‧{' '}
                 {summarize(c.after)}
               </li>
             ))}

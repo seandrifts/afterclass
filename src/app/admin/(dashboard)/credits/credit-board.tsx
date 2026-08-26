@@ -185,15 +185,15 @@ export function CreditBoard({
 
               <p className="mt-2 text-xs text-ink-soft">
                 {TYPE_LABELS[row.type] ?? row.type}
-                {' · '}
+                {' ‧ '}
                 {new Date(row.created_at).toLocaleString('zh-TW', {
                   month: 'numeric',
                   day: 'numeric',
                   hour: '2-digit',
                   minute: '2-digit',
                 })}
-                {row.staff?.name ? ` · ${row.staff.name}` : ''}
-                {row.note ? ` · ${row.note}` : ''}
+                {row.staff?.name ? ` ‧ ${row.staff.name}` : ''}
+                {row.note ? ` ‧ ${row.note}` : ''}
               </p>
             </li>
           ))}

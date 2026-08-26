@@ -71,7 +71,7 @@ export async function GET(
 </style></head>
 <body>
 <div class="head">
-  ${batch.name} · 共 ${cards.length} 組 · 用瀏覽器列印功能輸出，可另存為 PDF
+  ${batch.name} ‧ 共 ${cards.length} 組 ‧ 用瀏覽器列印功能輸出，可另存為 PDF
 </div>
 <div class="sheet">${cards.join('')}</div>
 </body></html>`;

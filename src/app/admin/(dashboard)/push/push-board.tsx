@@ -137,20 +137,20 @@ export function PushBoard({
         <h2 className="text-sm font-bold text-ink-soft">運作方式</h2>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-soft">
           <li>
-            · 每日凌晨 4 點自動執行，找出 {settings.expire_warn_days}{' '}
+            ‧ 每日凌晨 4 點自動執行，找出 {settings.expire_warn_days}{' '}
             天內到期且還有餘額的客人
           </li>
           <li>
-            · <strong>同一個到期日只會推一次</strong>
+            ‧ <strong>同一個到期日只會推一次</strong>
             ，不會連續幾天每天煩客人
           </li>
           <li>
-            · 客人來店消費後到期日往後滾，下個週期到期前會再收到一次
+            ‧ 客人來店消費後到期日往後滾，下個週期到期前會再收到一次
           </li>
           <li>
-            · 推播被拒（封鎖或沒加好友）會標記起來不再重試，不浪費額度
+            ‧ 推播被拒（封鎖或沒加好友）會標記起來不再重試，不浪費額度
           </li>
-          <li>· 沒有加官方帳號好友的客人推不到，登入不等於加好友</li>
+          <li>‧ 沒有加官方帳號好友的客人推不到，登入不等於加好友</li>
         </ul>
       </Card>
     </div>
@@ -262,7 +262,7 @@ function PendingList({
             <li key={i} className="flex justify-between">
               <span>{s.name}</span>
               <span className="tabular text-xs">
-                {s.balance} 元 · 剩 {s.days} 天
+                {s.balance} 元 ‧ 剩 {s.days} 天
               </span>
             </li>
           ))}

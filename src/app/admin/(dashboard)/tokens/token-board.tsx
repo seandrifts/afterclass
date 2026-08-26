@@ -115,7 +115,7 @@ function BatchCard({ batch }: { batch: BatchRow }) {
         <h2 className="font-bold">{batch.name}</h2>
         <span className="text-xs text-ink-faint">
           {new Date(batch.created_at).toLocaleDateString('zh-TW')}
-          {batch.note ? ` · ${batch.note}` : ''}
+          {batch.note ? ` ‧ ${batch.note}` : ''}
         </span>
       </div>
 

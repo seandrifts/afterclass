@@ -31,7 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
       目前在 Vercel 上靠系統變數僥倖正確，但綁自訂網域就會壞。
     */
     metadataBase: new URL(env.siteUrl),
-    title: { default: shopName, template: `%s · ${shopName}` },
+    title: { default: shopName, template: `%s ‧ ${shopName}` },
     description,
     applicationName: shopName,
     manifest: '/manifest.webmanifest',

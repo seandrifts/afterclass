@@ -68,22 +68,22 @@ export default async function RulesPage() {
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-soft">
           <li>
             {settings.points_display_enabled
-              ? `· ${settings.points_per_dollar} 點等值新台幣 1 元，僅供本店消費折抵`
-              : '· 回饋金以新台幣計，僅供本店消費折抵'}
+              ? `‧ ${settings.points_per_dollar} 點等值新台幣 1 元，僅供本店消費折抵`
+              : '‧ 回饋金以新台幣計，僅供本店消費折抵'}
           </li>
-          <li>· 點數不得轉讓、兌換現金、不找零</li>
+          <li>‧ 點數不得轉讓、兌換現金、不找零</li>
           <li>
-            · 每次消費最多折抵 {settings.max_redeem_per_visit} 元，
+            ‧ 每次消費最多折抵 {settings.max_redeem_per_visit} 元，
             不可與其他優惠併用
           </li>
           <li>
-            · 點數自<strong>最後一次異動日</strong>起{' '}
+            ‧ 點數自<strong>最後一次異動日</strong>起{' '}
             {settings.credit_expire_days} 日內有效。期間內任一次獲得或使用點數，
             有效期自動順延 {settings.credit_expire_days} 日。
             逾期未使用之點數將自動歸零，恕不補發
           </li>
           <li>
-            · 點數為本店提供之消費回饋，非預先付款購買之商品或服務
+            ‧ 點數為本店提供之消費回饋，非預先付款購買之商品或服務
           </li>
         </ul>
       </Card>
@@ -91,14 +91,14 @@ export default async function RulesPage() {
       <Card className="mt-4">
         <h2 className="font-bold">活動方式</h2>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-soft">
-          <li>· 每次消費（不限金額）可獲得抽獎序號一組</li>
-          <li>· 序號僅限使用一次，遺失恕不補發</li>
+          <li>‧ 每次消費（不限金額）可獲得抽獎序號一組</li>
+          <li>‧ 序號僅限使用一次，遺失恕不補發</li>
           <li>
-            · 抽獎後需於 {settings.claim_window_minutes} 分鐘內登入領取，
+            ‧ 抽獎後需於 {settings.claim_window_minutes} 分鐘內登入領取，
             逾時視為放棄
           </li>
-          <li>· 本店保留活動修改與終止之權利，但已發出之點數權益不受影響</li>
-          <li>· 個資僅用於本活動與本店行銷通知，得隨時要求刪除</li>
+          <li>‧ 本店保留活動修改與終止之權利，但已發出之點數權益不受影響</li>
+          <li>‧ 個資僅用於本活動與本店行銷通知，得隨時要求刪除</li>
         </ul>
       </Card>
 

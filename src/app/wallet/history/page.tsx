@@ -65,7 +65,7 @@ export default async function HistoryPage() {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
-                  {row.note ? ` · ${row.note}` : ''}
+                  {row.note ? ` ‧ ${row.note}` : ''}
                 </p>
               </div>
               <div className="text-right">

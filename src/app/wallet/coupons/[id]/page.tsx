@@ -64,16 +64,16 @@ export default async function CouponPage(
       <Card className="mt-4">
         <h2 className="text-sm font-bold">使用條件</h2>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed text-ink-soft">
-          <li>· {formatExpiryDate(coupon.expires_at)} 到期，逾期自動失效</li>
+          <li>‧ {formatExpiryDate(coupon.expires_at)} 到期，逾期自動失效</li>
           {coupon.min_spend > 0 ? (
-            <li>· 單筆消費滿 {coupon.min_spend} 元可用</li>
+            <li>‧ 單筆消費滿 {coupon.min_spend} 元可用</li>
           ) : null}
           {coupon.max_discount !== null ? (
-            <li>· 折抵上限 {coupon.max_discount} 元，超過部分需自付</li>
+            <li>‧ 折抵上限 {coupon.max_discount} 元，超過部分需自付</li>
           ) : null}
-          {coupon.terms ? <li>· {coupon.terms}</li> : null}
-          <li>· 不得轉讓、兌換現金、不找零</li>
-          <li>· 不可與其他優惠併用</li>
+          {coupon.terms ? <li>‧ {coupon.terms}</li> : null}
+          <li>‧ 不得轉讓、兌換現金、不找零</li>
+          <li>‧ 不可與其他優惠併用</li>
         </ul>
       </Card>
     </Screen>
