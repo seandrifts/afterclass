@@ -21,6 +21,16 @@ export const kanzimi = localFont({
   src: [
     {
       path: './kanzimi-core.woff2',
+      /*
+        柑仔蜜不是可變字型，只有單一字重（OS/2 usWeightClass 800）。
+
+        宣告成 400–900 是刻意的：這樣瀏覽器認為任何字重都由這個字檔
+        負責，就不會替 font-bold 硬畫一層合成粗體 —— 那對本來就已經
+        很粗的字型只會糊成一團。
+
+        代價是 font-bold 跟一般文字看起來一樣重，層次要靠字級與顏色
+        來分，不能靠字重。
+      */
       weight: '400 900',
       style: 'normal',
     },

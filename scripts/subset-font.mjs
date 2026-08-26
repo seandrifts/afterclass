@@ -45,6 +45,40 @@ const collect = (pattern) => {
 collect('src/**/*.{ts,tsx}');
 collect('supabase/**/*.sql');
 
+/*
+  掃原始碼掃不到的字。
+
+  日期時間是 toLocaleString('zh-TW') 執行時才產生的，原始碼裡看不到
+  「上午」「下午」這些字。之前就是漏了「午」，結果客人的明細頁上
+  「下午」兩個字分屬兩種字型 —— 因為 core 沒有，瀏覽器改用 ext，
+  而 ext 有 1.7 MB，在行動網路下要好幾秒才換過來。
+
+  凡是介面自己會產生的字，都必須進 core。ext 只留給真正無法預期的
+  內容（客人的 LINE 暱稱、老闆自己打的獎項名稱）。
+*/
+const RUNTIME = `
+上午下午年月日時分秒星期週天今昨明前後本西元
+`.replace(/\s/g, '');
+
+/*
+  台灣常見姓氏與菜市場名用字。
+
+  客人的名字來自 LINE 暱稱，理論上什麼字都可能有，但實務上絕大多數
+  落在這個範圍。多這幾百個字讓 core 只大一點點，卻能讓大部分客人
+  不必為了自己的名字去下載那 1.7 MB。
+*/
+const NAMES = `
+陳林黃張李王吳劉蔡楊許鄭謝郭洪曾邱廖賴徐周葉蘇莊呂江何蕭羅高潘簡
+朱鍾游詹胡施沈余趙盧梁顏柯翁魏孫戴范方宋鄧杜傅侯曹薛丁卓阮馬董
+溫唐藍石紀連歐倪嚴牛甘祝熊白田塗巫季婁松武聶
+雅婷淑芬怡君佳玲美惠慧文志明家豪俊宏建國瑞祥宗翰冠廷承恩子彥柏
+睿宇軒琪欣萱涵語彤宸沐晴心妍芯昀晨希嘉筠茹蓉媛珊琳蕙貞秀鳳霞菊
+偉傑倫哲皓凱威廷賢仁義禮智信忠孝勇誠泰豐榮富貴財旺春夏秋冬
+`.replace(/\s/g, '');
+
+for (const ch of RUNTIME) used.add(ch);
+for (const ch of NAMES) used.add(ch);
+
 // ---------------------------------------------------------------
 // 2. 常用漢字。動態內容（客人暱稱、老闆打的獎項名稱）會用到這些
 // ---------------------------------------------------------------
@@ -109,11 +143,52 @@ function subset(outName, text, unicodeRange) {
   return out;
 }
 
+/*
+  裁完之後驗一次。
+
+  fontTools 對於來源字型沒有的字會安靜跳過，不會報錯，所以「少字」
+  這件事不會自己浮出來。之前漏掉「午」就是這樣過關的，直到客人的
+  明細頁上「下午」變成兩種字型才發現。
+
+  比對方式是排除來源字型本來就沒有的字 —— 那些是真的拿不到，不算
+  裁切的錯。剩下的只要有一個沒進 core 就讓指令失敗。
+*/
+function verifyCore(coreFile, wanted) {
+  const py = `
+import sys, json
+from fontTools.ttLib import TTFont
+def cmap(p):
+    f = TTFont(p, lazy=True); s = set()
+    for t in f['cmap'].tables: s |= set(t.cmap.keys())
+    return s
+have, orig = cmap(sys.argv[1]), cmap(sys.argv[2])
+want = json.loads(sys.stdin.read())
+print(json.dumps([c for c in want
+                  if ord(c) in orig and ord(c) not in have]))
+`;
+  const out = execFileSync('python3', ['-c', py, coreFile, src], {
+    input: JSON.stringify([...wanted]),
+    encoding: 'utf8',
+  });
+  return JSON.parse(out);
+}
+
 console.log(`\n來源：${src}  ${kb(src)} KB\n`);
 
 console.log('[1] core（介面文案 + 常用字，立即載入）');
 const coreFile = subset('kanzimi-core.woff2', core);
 console.log(`  ✓ ${path.basename(coreFile)}  ${kb(coreFile)} KB  （${core.length} 字）`);
+
+const dropped = verifyCore(coreFile, core);
+if (dropped.length) {
+  console.error(
+    `\n✗ core 少了 ${dropped.length} 個來源字型有、卻沒裁進去的字：\n` +
+      `  ${dropped.join('')}\n` +
+      `  這些字在畫面上會改用 ext（1.7 MB）或系統字，同一句話會出現兩種字型。\n`,
+  );
+  process.exit(1);
+}
+console.log('  ✓ 已驗證：介面會用到的字都在 core 裡');
 
 console.log('\n[2] ext（其餘常用漢字，遇到才載入）');
 const extFile = subset('kanzimi-ext.woff2', null, 'U+4E00-9FFF');
