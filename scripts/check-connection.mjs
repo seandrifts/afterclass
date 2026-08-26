@@ -173,6 +173,88 @@ if (s.campaign_active) {
   ok('活動未開啟', '這是預設值。等店名、獎項、序號都備妥再從後台打開');
 }
 
+console.log('\n[7] 資料庫版本');
+
+/*
+  逐一確認每個 migration 真的跑過。
+
+  Supabase 的 SQL 編輯器不會記錄你跑過哪些檔案，貼上去執行成功之後
+  畫面就沒了，很容易分不清「跑過了」跟「以為跑過了」。所以這裡不看
+  紀錄，直接檢查每個檔案應該建立出來的東西存不存在。
+*/
+const MIGRATIONS = [
+  {
+    file: '0004_notifications.sql',
+    what: '推播紀錄',
+    probe: () =>
+      db.from('notifications').select('id', { head: true, count: 'exact' }),
+  },
+  {
+    file: '0005_batch_stats.sql',
+    what: '批次統計',
+    probe: () => db.rpc('batch_stats'),
+  },
+  {
+    file: '0006_lockout_ladder.sql',
+    what: '登入鎖定階梯',
+    probe: () => db.from('staff').select('lockout_level').limit(1),
+  },
+];
+
+for (const m of MIGRATIONS) {
+  const { error } = await m.probe();
+  if (error) {
+    bad(`${m.file}（${m.what}）還沒執行`, `Supabase SQL Editor 貼上 supabase/migrations/${m.file} 再跑一次`);
+  } else {
+    ok(`${m.file}`, m.what);
+  }
+}
+
+console.log('\n[8] 卡片');
+
+const tokens = await db.from('draw_tokens').select('status, kind, expires_at');
+
+if (tokens.error) {
+  bad(`讀不到卡片：${tokens.error.message}`);
+} else {
+  const now = Date.now();
+
+  /*
+    紙卡印出來時是 inactive，店員收錢後才刷成 active。所以「印了幾張」
+    跟「客人現在抽得到幾張」是兩件事，這裡分開算。
+
+    active 但已過保存期限的要另外挑出來 —— 它們在資料庫裡看起來還是
+    active，但客人掃了會被拒絕，只看狀態欄會誤判。
+    */
+  const live = tokens.data.filter(
+    (t) =>
+      t.kind === 'card' &&
+      t.status === 'active' &&
+      (!t.expires_at || Date.parse(t.expires_at) > now),
+  ).length;
+
+  const spare = tokens.data.filter(
+    (t) => t.kind === 'card' && t.status === 'inactive',
+  ).length;
+
+  if (tokens.data.length === 0) {
+    bad(
+      '一張卡片都還沒產生',
+      '後台「序號卡」建立一批並列印，否則客人掃不到任何東西',
+    );
+  } else if (live === 0) {
+    bad(
+      `沒有一張卡片是客人現在抽得到的（庫存 ${spare} 張未啟用）`,
+      spare > 0
+        ? '卡片印出來是未啟用狀態，要店員端刷過才會生效'
+        : '已全部抽完或過期，需要再建一批',
+    );
+  } else {
+    ok('客人抽得到的卡片', `${live} 張`);
+    ok('未啟用庫存', `${spare} 張`);
+  }
+}
+
 console.log(
   failed === 0
     ? '\n全部通過。可以 npm run dev 了。\n'
