@@ -17,12 +17,13 @@ export async function requireStaff(): Promise<StaffSession> {
  * 店員看不到成本、機率、報表與會員名單。那些是商業機密，
  * 而且店員知道機率之後可以幫親友挑時機。
  *
- * 未登入導到後台登入頁（而不是店員登入頁），已登入但不是老闆
- * 則導回店員端，不告訴他後台長什麼樣子。
+ * 未登入一律導到店員登入頁，不導向後台入口。後台的網址帶一段
+ * 秘密字串（見 /enter/[key]），如果這裡把它轉出去，等於自己
+ * 把入口公告出來。老闆用書籤進入。
  */
 export async function requireOwner(): Promise<StaffSession> {
   const session = await getStaffSession();
-  if (!session) redirect('/admin/login');
+  if (!session) redirect('/staff/login');
   if (session.role !== 'owner') redirect('/staff');
   return session;
 }

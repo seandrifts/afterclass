@@ -10,10 +10,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 兩個登入頁本身不能被擋，否則會無限轉址
-  const isLoginPage =
-    pathname === '/staff/login' || pathname === '/admin/login';
-  if (isLoginPage) return NextResponse.next();
+  // 登入頁本身不能被擋，否則會無限轉址
+  if (pathname === '/staff/login') return NextResponse.next();
 
   const isStaffArea = pathname.startsWith('/staff');
   const isAdminArea = pathname.startsWith('/admin');
@@ -21,9 +19,8 @@ export function proxy(request: NextRequest) {
   if (!isStaffArea && !isAdminArea) return NextResponse.next();
 
   if (!request.cookies.get('ld_staff')) {
-    // 未登入時導到對應的登入頁，讓老闆不用先進店員頁再切過去
-    const target = isAdminArea ? '/admin/login' : '/staff/login';
-    return NextResponse.redirect(new URL(target, request.url));
+    // 一律導到店員登入頁。後台入口是秘密網址，不能從這裡透露出去
+    return NextResponse.redirect(new URL('/staff/login', request.url));
   }
 
   return NextResponse.next();

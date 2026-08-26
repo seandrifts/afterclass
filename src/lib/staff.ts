@@ -6,7 +6,26 @@ import { db } from './supabase';
 import type { StaffSession } from './session';
 
 const MAX_FAILURES = 5;
-const LOCKOUT_MINUTES = 15;
+
+/**
+ * 遞增鎖定。
+ *
+ * 固定 15 分鐘的鎖定，換算下來每天仍可嘗試 480 次。6 位數 PIN
+ * 需要 2.9 年才會被猜到，但 4 位數只要 10 天。
+ *
+ * 改成每次被鎖時間翻倍，攻擊者的嘗試速率會急速下降：
+ * 第一次 15 分鐘、接著 1 小時、4 小時、24 小時。連續攻擊一天之後
+ * 幾乎完全停擺，而正常店員打錯幾次頂多等 15 分鐘。
+ */
+const LOCKOUT_LADDER_MINUTES = [15, 60, 240, 1440];
+
+/**
+ * PIN 最低長度。
+ *
+ * 4 位數在現有的鎖定機制下平均 10 天就會被猜中，那是真的會發生的
+ * 時間尺度。6 位數是 2.9 年，差距在於組合數多了一百倍。
+ */
+export const MIN_PIN_LENGTH = 6;
 
 export type LoginResult =
   | { ok: true; session: StaffSession }
@@ -20,6 +39,7 @@ interface StaffRow {
   is_active: boolean;
   failed_count: number;
   locked_until: string | null;
+  lockout_level: number;
 }
 
 /**
@@ -37,7 +57,9 @@ export async function loginStaff(
 ): Promise<LoginResult> {
   const { data } = await db()
     .from('staff')
-    .select('id, name, pin_hash, role, is_active, failed_count, locked_until')
+    .select(
+      'id, name, pin_hash, role, is_active, failed_count, locked_until, lockout_level',
+    )
     .eq('id', staffId)
     .eq('is_active', true)
     .maybeSingle();
@@ -59,26 +81,41 @@ export async function loginStaff(
     const failures = staff.failed_count + 1;
     const shouldLock = failures >= MAX_FAILURES;
 
+    if (!shouldLock) {
+      await db()
+        .from('staff')
+        .update({ failed_count: failures })
+        .eq('id', staff.id);
+
+      return { ok: false, reason: 'BAD_PIN' };
+    }
+
+    // 每次被鎖，下一次的時間拉長一階
+    const level = Math.min(
+      staff.lockout_level ?? 0,
+      LOCKOUT_LADDER_MINUTES.length - 1,
+    );
+    const minutes = LOCKOUT_LADDER_MINUTES[level];
+
     await db()
       .from('staff')
       .update({
-        failed_count: shouldLock ? 0 : failures,
-        locked_until: shouldLock
-          ? new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString()
-          : null,
+        failed_count: 0,
+        lockout_level: level + 1,
+        locked_until: new Date(Date.now() + minutes * 60_000).toISOString(),
       })
       .eq('id', staff.id);
 
-    return shouldLock
-      ? { ok: false, reason: 'LOCKED', lockedMinutes: LOCKOUT_MINUTES }
-      : { ok: false, reason: 'BAD_PIN' };
+    return { ok: false, reason: 'LOCKED', lockedMinutes: minutes };
   }
 
+  // 登入成功就把鎖定階梯歸零，正常使用者不會被歷史紀錄拖累
   await db()
     .from('staff')
     .update({
       failed_count: 0,
       locked_until: null,
+      lockout_level: 0,
       last_login_at: new Date().toISOString(),
     })
     .eq('id', staff.id);
@@ -91,6 +128,38 @@ export async function loginStaff(
 
 export async function hashPin(pin: string): Promise<string> {
   return bcrypt.hash(pin, 10);
+}
+
+/**
+ * 擋掉一眼就能猜到的 PIN。
+ *
+ * 長度只決定「總共有多少種可能」，不決定「攻擊者會先試哪幾種」。
+ * 888888 是 6 位數，組合空間一百萬，但它會出現在任何攻擊字典的
+ * 前十筆。全同數字、連號、以及生日型的年份開頭都屬於這一類。
+ */
+export function weakPinReason(pin: string): string | null {
+  if (pin.length < MIN_PIN_LENGTH) {
+    return `PIN 至少要 ${MIN_PIN_LENGTH} 位數`;
+  }
+  if (/^(\d)\1+$/.test(pin)) {
+    return '不能全部都是同一個數字';
+  }
+  if (isSequential(pin)) {
+    return '不能是連續數字';
+  }
+  return null;
+}
+
+function isSequential(pin: string): boolean {
+  let up = true;
+  let down = true;
+
+  for (let i = 1; i < pin.length; i += 1) {
+    const diff = Number(pin[i]) - Number(pin[i - 1]);
+    if (diff !== 1) up = false;
+    if (diff !== -1) down = false;
+  }
+  return up || down;
 }
 
 /**

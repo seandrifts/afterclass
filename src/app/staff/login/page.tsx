@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation';
 
 import { LoginForm } from './login-form';
-import { RoleSwitch } from '@/components/role-switch';
 import { Screen } from '@/components/ui';
 import { getStaffSession } from '@/lib/session';
 import { listActiveStaff } from '@/lib/staff';
@@ -20,11 +19,11 @@ export default async function StaffLoginPage() {
   return (
     <Screen>
       <div className="flex flex-1 flex-col justify-center">
-        <RoleSwitch current="staff" />
-
-        <h1 className="mt-6 mb-6 text-center text-2xl font-black">
-          店員登入
-        </h1>
+        {/*
+          刻意不放通往後台的連結。後台入口是一段只有老闆知道的
+          秘密網址，在這裡放切換鍵等於把它公告出來。
+        */}
+        <h1 className="mb-6 text-center text-2xl font-black">店員登入</h1>
 
         <LoginForm staff={staff} role="staff" />
       </div>

@@ -7,7 +7,7 @@ import { IconBackspace } from '@/components/icons';
 import { Button, Card } from '@/components/ui';
 
 const MAX_PIN = 6;
-const MIN_PIN = 4;
+const MIN_PIN = 6;
 
 export function LoginForm({
   staff,

@@ -12,7 +12,7 @@ import {
   getStaffSession,
   setStaffSession,
 } from '@/lib/session';
-import { loginStaff } from '@/lib/staff';
+import { loginStaff, MIN_PIN_LENGTH } from '@/lib/staff';
 import { db } from '@/lib/supabase';
 import { getUserByWalletCode } from '@/lib/users';
 
@@ -24,8 +24,8 @@ export async function loginAction(_prev: unknown, formData: FormData) {
   const pin = String(formData.get('pin') ?? '');
   const wantedRole = String(formData.get('role') ?? 'staff');
 
-  if (!staffId || pin.length < 4) {
-    return { error: '請選擇人員並輸入 PIN' };
+  if (!staffId || pin.length < MIN_PIN_LENGTH) {
+    return { error: `請選擇人員並輸入 ${MIN_PIN_LENGTH} 位數 PIN` };
   }
 
   const result = await loginStaff(staffId, pin);
