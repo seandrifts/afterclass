@@ -27,7 +27,13 @@
   --color-warn: #b7791f;
   --color-bad: #c53030;
 
-  --font-sans: var(--font-noto-tc), system-ui, sans-serif;
+  /*
+    順序有意義：core 先用（已下載），core 沒有的字才落到 Ext
+    （靠 unicode-range 延後下載），再不行才用系統字。
+  */
+  --font-sans:
+    var(--font-kanzimi), 'Kanzimi Ext', 'PingFang TC', 'Hiragino Sans CNS',
+    'Noto Sans TC', 'Microsoft JhengHei', system-ui, sans-serif;
 
   --radius-card: 1.25rem;
 }
@@ -78,4 +84,21 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/*
+  罕用漢字的延伸字集。
+
+  客人的 LINE 暱稱或老闆自訂的獎項名稱可能出現任何字，core 那份
+  只涵蓋介面文案與常用字。unicode-range 讓瀏覽器只有在頁面真的
+  出現這個範圍內、而 core 又沒有的字時，才去下載這 1.7 MB。
+
+  平常沒人會碰到，碰到的那一次也只是那個字晚幾百毫秒才換成柑仔蜜。
+*/
+@font-face {
+  font-family: 'Kanzimi Ext';
+  src: url('./fonts/kanzimi-ext.woff2') format('woff2');
+  font-weight: 400 900;
+  font-display: swap;
+  unicode-range: U+4E00-9FFF;
 }

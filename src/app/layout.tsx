@@ -1,17 +1,10 @@
 import type { Metadata, Viewport } from 'next';
-import { Noto_Sans_TC } from 'next/font/google';
 
 import './globals.css';
+import { kanzimi } from './fonts';
 import { env } from '@/lib/env';
 import { getSettings } from '@/lib/settings';
 import { brandScaleCss, readableOn } from '@/lib/theme';
-
-const notoTC = Noto_Sans_TC({
-  variable: '--font-noto-tc',
-  subsets: ['latin'],
-  weight: ['400', '500', '700', '900'],
-  display: 'swap',
-});
 
 /**
  * 標題與分享資訊從資料庫的店名帶入。
@@ -100,7 +93,7 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="zh-Hant-TW" className={`${notoTC.variable} h-full`}>
+    <html lang="zh-Hant-TW" className={`${kanzimi.variable} h-full`}>
       {brandCss ? (
         <style
           // 內容是從色碼推導出來的十六進位字串，不含使用者自由輸入的文字
