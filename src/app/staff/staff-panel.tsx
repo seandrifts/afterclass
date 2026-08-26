@@ -288,9 +288,20 @@ function RedeemForm({
   error?: string | null;
 }) {
   const usable = Math.min(user.balance, user.maxRedeem);
-  const quick = [10, 20, 30].filter((v) => v <= usable);
 
-  const [amount, setAmount] = useState(usable);
+  // 只留比「全部」小的，等於全部的那顆會跟「全部」重複
+  const quick = [5, 10, 20, 30].filter((v) => v < usable);
+
+  /*
+    金額用字串存，不用數字。
+
+    店員清空欄位想重打時，數字型別沒有「空」這個狀態，只能塞 0，
+    游標後面就一直卡著一個 0，要先刪掉才能打新的。尖峰時段這種
+    多餘動作很煩人。
+  */
+  const [raw, setRaw] = useState(String(usable));
+  const amount = raw === '' ? 0 : Number(raw);
+
   const [confirmRepeat, setConfirmRepeat] = useState(false);
 
   // 剛折抵過的話，要店員先確認過才解鎖折抵鍵
@@ -359,38 +370,66 @@ function RedeemForm({
       <input type="hidden" name="amount" value={amount} />
 
       <Card className={acknowledged ? '' : 'pointer-events-none opacity-40'}>
-        <p className="text-sm font-bold text-ink-soft">本次折抵</p>
-        <p className="tabular my-3 text-center text-5xl font-black">
-          {amount}
-          <span className="ml-2 text-2xl font-bold text-ink-soft">元</span>
+        <label
+          htmlFor="redeem-amount"
+          className="text-sm font-bold text-ink-soft"
+        >
+          本次折抵
+        </label>
+
+        <div className="my-3 flex items-baseline justify-center gap-2">
+          <input
+            id="redeem-amount"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={raw}
+            /*
+              超過可折抵金額當下就夾住，不等到按確認才報錯。
+              店員看到數字停在上限，就知道這位客人只能折這麼多。
+            */
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, '').slice(0, 5);
+              setRaw(digits === '' ? '' : String(Math.min(usable, Number(digits))));
+            }}
+            // 點進去就全選，直接打新的數字，不必先刪
+            onFocus={(e) => e.target.select()}
+            /*
+              吞掉 Enter。表單裡按 Enter 會直接送出，等於跳過「再按一次
+              確認」那道保護 —— 而那道保護擋的是客人的錢。
+            */
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.preventDefault();
+            }}
+            aria-describedby="redeem-max"
+            className="tabular w-36 rounded-xl border-2 border-line bg-surface py-2 text-center text-5xl font-black text-ink transition-colors focus:border-brand-500 focus:outline-none"
+          />
+          <span className="text-2xl font-bold text-ink-soft">元</span>
+        </div>
+
+        <p id="redeem-max" className="mb-3 text-center text-sm text-ink-faint">
+          最多可折 {usable} 元
         </p>
 
-        <div className="grid grid-cols-4 gap-2">
-          {quick.map((v) => (
+        {/*
+          用 flex 而不是固定四欄。餘額小的時候快捷鍵會被濾掉，固定欄數
+          會讓剩下的那一顆縮在左邊、右邊空一大片
+        */}
+        <div className="flex flex-wrap gap-2">
+          {[...quick, usable].map((v, i) => (
             <button
               key={v}
               type="button"
-              onClick={() => setAmount(v)}
-              className={`min-h-14 cursor-pointer rounded-xl border-2 text-lg font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 ${
+              onClick={() => setRaw(String(v))}
+              className={`min-h-14 flex-1 basis-18 cursor-pointer rounded-xl border-2 text-lg font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 ${
                 amount === v
                   ? 'border-brand-500 bg-brand-50 text-brand-700'
                   : 'border-line bg-raised'
               }`}
             >
-              {v}
+              {i === quick.length ? '全部' : v}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setAmount(usable)}
-            className={`min-h-14 cursor-pointer rounded-xl border-2 text-lg font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 ${
-              amount === usable
-                ? 'border-brand-500 bg-brand-50 text-brand-700'
-                : 'border-line bg-raised'
-            }`}
-          >
-            全部
-          </button>
         </div>
       </Card>
 
