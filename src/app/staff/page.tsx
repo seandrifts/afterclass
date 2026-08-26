@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { StaffPanel } from './staff-panel';
 import { getStaffSession } from '@/lib/session';
 import { db } from '@/lib/supabase';
+import { shopDayStart } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,8 +50,5 @@ export default async function StaffPage() {
   );
 }
 
-function startOfToday(): string {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
+// 日界用店家時區，見 src/lib/time.ts
+const startOfToday = () => shopDayStart();

@@ -9,6 +9,7 @@ import {
 } from './actions';
 import { Button, Card } from '@/components/ui';
 import type { Prize, PrizeType, Settings } from '@/lib/types';
+import { formatFullDateTime } from '@/lib/time';
 
 const TYPE_LABELS: Record<PrizeType, string> = {
   credit: '儲值金',
@@ -277,7 +278,7 @@ export function PrizeBoard({
           <ul className="mt-3 space-y-1 text-xs text-ink-faint">
             {changes.map((c) => (
               <li key={c.id}>
-                {new Date(c.created_at).toLocaleString('zh-TW')} ‧{' '}
+                {formatFullDateTime(c.created_at)} ‧{' '}
                 {summarize(c.after)}
               </li>
             ))}

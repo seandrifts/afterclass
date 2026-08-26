@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import { activateAction, createBatchAction } from './actions';
 import type { BatchRow } from './page';
 import { Button, Card } from '@/components/ui';
+import { formatDate } from '@/lib/time';
 
 export function TokenBoard({
   batches,
@@ -114,7 +115,7 @@ function BatchCard({ batch }: { batch: BatchRow }) {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-bold">{batch.name}</h2>
         <span className="text-xs text-ink-faint">
-          {new Date(batch.created_at).toLocaleDateString('zh-TW')}
+          {formatDate(batch.created_at)}
           {batch.note ? ` ‧ ${batch.note}` : ''}
         </span>
       </div>

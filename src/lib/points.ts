@@ -1,4 +1,5 @@
 import type { Settings } from './types';
+import { formatShortDate } from './time';
 
 /**
  * 點數顯示。
@@ -58,8 +59,12 @@ export function daysUntilExpiry(expiresAt: string | null): number | null {
   return Math.ceil(ms / 86_400_000);
 }
 
-/** 到期日顯示，例如「11/03」 */
+/**
+ * 到期日顯示，例如「11/03」。
+ *
+ * 原本用 getMonth()/getDate()，那是伺服器當地時間 —— 在 Vercel 上是
+ * UTC，接近午夜的到期日會顯示成前一天，客人會以為少了一天。
+ */
 export function formatExpiryDate(expiresAt: string): string {
-  const d = new Date(expiresAt);
-  return `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, '0')}`;
+  return formatShortDate(expiresAt);
 }

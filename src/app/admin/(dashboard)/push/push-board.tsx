@@ -9,6 +9,7 @@ import {
 } from './actions';
 import { Button, Card } from '@/components/ui';
 import type { Settings } from '@/lib/types';
+import { formatDateTime } from '@/lib/time';
 
 interface Recent {
   id: string;
@@ -118,12 +119,7 @@ export function PushBoard({
                       {s.text}
                     </span>
                     <span className="ml-2 text-xs text-ink-faint">
-                      {new Date(r.created_at).toLocaleString('zh-TW', {
-                        month: 'numeric',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatDateTime(r.created_at)}
                     </span>
                   </span>
                 </li>

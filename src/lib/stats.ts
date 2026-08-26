@@ -1,20 +1,16 @@
 import 'server-only';
 
 import { db } from './supabase';
+import { shopDayStart, shopMonthStart } from './time';
 
-function startOfDay(offsetDays = 0): string {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - offsetDays);
-  return d.toISOString();
-}
+/*
+  日界一律用店家時區。
 
-function startOfMonth(): string {
-  const d = new Date();
-  d.setDate(1);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
+  原本是 new Date().setHours(0,0,0,0)，在 Vercel（UTC）上等於台北
+  早上八點才換日 —— 前一晚的生意會被算進隔天。
+*/
+const startOfDay = shopDayStart;
+const startOfMonth = shopMonthStart;
 
 export interface DashboardStats {
   todayIssued: number;

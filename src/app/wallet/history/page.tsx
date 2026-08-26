@@ -9,6 +9,7 @@ import { getSettings } from '@/lib/settings';
 import { getUserSession } from '@/lib/session';
 import { db } from '@/lib/supabase';
 import type { BalanceTransaction, TxnType } from '@/lib/types';
+import { formatDateTime } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,12 +60,7 @@ export default async function HistoryPage() {
               <div>
                 <p className="font-medium">{LABELS[row.type]}</p>
                 <p className="mt-0.5 text-sm text-ink-faint">
-                  {new Date(row.created_at).toLocaleString('zh-TW', {
-                    month: 'numeric',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatDateTime(row.created_at)}
                   {row.note ? ` ‧ ${row.note}` : ''}
                 </p>
               </div>

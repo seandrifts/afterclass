@@ -1,6 +1,7 @@
 import { CreditBoard } from './credit-board';
 import { db } from '@/lib/supabase';
 import { getSettings } from '@/lib/settings';
+import { shopMonthStart } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,9 +66,8 @@ export default async function CreditsPage(
   const warnCutoff = new Date();
   warnCutoff.setDate(warnCutoff.getDate() + settings.expire_warn_days);
 
-  const month = new Date();
-  month.setDate(1);
-  month.setHours(0, 0, 0, 0);
+  // 月初也要用店家時區，否則月初與月底那幾小時會歸錯月份
+  const monthStart = shopMonthStart();
 
   const [soon, all, expiredThisMonth, integrity] = await Promise.all([
     db()
@@ -80,7 +80,7 @@ export default async function CreditsPage(
       .from('balance_transactions')
       .select('amount')
       .eq('type', 'expire')
-      .gte('created_at', month.toISOString()),
+      .gte('created_at', monthStart),
     db().rpc('check_balance_integrity'),
   ]);
 

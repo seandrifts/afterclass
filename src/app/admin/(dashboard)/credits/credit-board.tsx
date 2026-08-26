@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import { adjustAction } from './actions';
 import type { LedgerRow } from './page';
 import { Button, Card } from '@/components/ui';
+import { formatDateTime } from '@/lib/time';
 
 const TYPE_LABELS: Record<string, string> = {
   earn: '抽獎進帳',
@@ -186,12 +187,7 @@ export function CreditBoard({
               <p className="mt-2 text-xs text-ink-soft">
                 {TYPE_LABELS[row.type] ?? row.type}
                 {' ‧ '}
-                {new Date(row.created_at).toLocaleString('zh-TW', {
-                  month: 'numeric',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+                {formatDateTime(row.created_at)}
                 {row.staff?.name ? ` ‧ ${row.staff.name}` : ''}
                 {row.note ? ` ‧ ${row.note}` : ''}
               </p>
@@ -220,12 +216,7 @@ export function CreditBoard({
               {ledger.map((row) => (
                 <tr key={row.id} className="border-b border-line/60">
                   <td className="whitespace-nowrap px-4 py-2.5 text-xs text-ink-faint">
-                    {new Date(row.created_at).toLocaleString('zh-TW', {
-                      month: 'numeric',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatDateTime(row.created_at)}
                   </td>
                   <td className="px-3 py-2.5">
                     {row.users?.display_name ?? '—'}
