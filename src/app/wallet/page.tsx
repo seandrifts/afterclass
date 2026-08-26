@@ -59,7 +59,15 @@ export default async function WalletPage() {
       {/* 店員折抵後，客人開著的這一頁要自己更新，不能等手動重整 */}
       <AutoRefresh />
       <header className="mb-5 flex items-center justify-between gap-3">
-        <div className="min-w-0">
+        {settings.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={settings.logo_url}
+            alt=""
+            className="size-11 shrink-0 rounded-full object-cover"
+          />
+        ) : null}
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm text-ink-soft">
             {settings.shop_name || '消費抽獎'}
           </p>

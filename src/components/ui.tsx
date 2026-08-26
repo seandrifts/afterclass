@@ -47,7 +47,7 @@ const buttonSizes = {
 } as const;
 
 const buttonVariants = {
-  primary: 'bg-brand-500 text-white shadow-md hover:bg-brand-600',
+  primary: 'bg-brand-500 text-(--color-brand-on) shadow-md hover:bg-brand-600',
   secondary: 'border-2 border-line bg-raised text-ink hover:bg-brand-50',
   ghost: 'text-ink-soft hover:bg-brand-50',
   danger: 'bg-bad text-white hover:opacity-90',

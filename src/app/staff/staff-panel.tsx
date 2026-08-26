@@ -138,7 +138,7 @@ function TabButton({
       onClick={onClick}
       className={`min-h-12 cursor-pointer rounded-xl text-base font-bold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 ${
         active
-          ? 'bg-brand-500 text-white'
+          ? 'bg-brand-500 text-(--color-brand-on)'
           : 'border border-line bg-raised text-ink-soft'
       }`}
     >

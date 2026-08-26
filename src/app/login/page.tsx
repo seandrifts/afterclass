@@ -36,9 +36,19 @@ export default async function LoginPage(props: PageProps<'/login'>) {
     <Screen>
       <div className="flex flex-1 flex-col justify-center">
         <div className="text-center">
-          <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-brand-50 text-brand-500">
-            <IconBowl className="size-10" />
-          </div>
+          {settings.logo_url ? (
+            // 老闆自己上傳的圖，來源固定為我們的 storage
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={settings.logo_url}
+              alt={settings.shop_name || '店家'}
+              className="mx-auto size-20 rounded-full object-cover"
+            />
+          ) : (
+            <div className="mx-auto flex size-20 items-center justify-center rounded-full bg-brand-50 text-brand-500">
+              <IconBowl className="size-10" />
+            </div>
+          )}
           <h1 className="mt-4 text-2xl font-black">
             {settings.shop_name || '消費抽獎'}
           </h1>

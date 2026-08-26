@@ -594,7 +594,7 @@ function WeightSaver({
         <button
           type="submit"
           disabled={pending}
-          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl bg-brand-500 px-5 py-2 text-sm font-bold text-white hover:bg-brand-600"
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl bg-brand-500 px-5 py-2 text-sm font-bold text-(--color-brand-on) hover:bg-brand-600"
         >
           {pending ? '儲存中⋯' : '儲存權重'}
         </button>

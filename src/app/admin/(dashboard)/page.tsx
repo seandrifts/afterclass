@@ -150,7 +150,7 @@ export default async function AdminDashboard() {
       <div className="flex flex-wrap gap-3">
         <Link
           href="/admin/prizes"
-          className="cursor-pointer rounded-xl bg-brand-500 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-brand-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+          className="cursor-pointer rounded-xl bg-brand-500 px-5 py-3 text-sm font-bold text-(--color-brand-on) transition-colors hover:bg-brand-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
         >
           調整獎項與機率
         </Link>

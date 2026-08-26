@@ -107,7 +107,7 @@ export function CreditBoard({
           </label>
           <button
             type="submit"
-            className="cursor-pointer rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+            className="cursor-pointer rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-bold text-(--color-brand-on) transition-colors hover:bg-brand-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
           >
             查詢
           </button>

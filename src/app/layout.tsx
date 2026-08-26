@@ -4,6 +4,7 @@ import { Noto_Sans_TC } from 'next/font/google';
 import './globals.css';
 import { env } from '@/lib/env';
 import { getSettings } from '@/lib/settings';
+import { brandScaleCss, readableOn } from '@/lib/theme';
 
 const notoTC = Noto_Sans_TC({
   variable: '--font-noto-tc',
@@ -72,16 +73,45 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  /*
+    主色從資料庫帶入。
+
+    設定頁本來就有「主色」這個控制項，但它只是把值存進資料庫，
+    介面完全沒有讀它，等於一個按了沒反應的按鈕。
+
+    這裡把老闆挑的顏色推導成整組色階，用 style 覆蓋 globals.css
+    的預設值。文字顏色依主色亮度自動選黑或白，否則挑到亮黃色時
+    按鈕上的白字會完全看不見。
+  */
+  let brandCss = '';
+
+  try {
+    const settings = await getSettings();
+    if (settings.primary_color) {
+      brandCss =
+        brandScaleCss(settings.primary_color) +
+        `:root{--color-brand-on:${readableOn(settings.primary_color)}}`;
+    }
+  } catch {
+    // 資料庫還沒設定好時就用 globals.css 的預設色
+  }
+
   return (
     <html lang="zh-Hant-TW" className={`${notoTC.variable} h-full`}>
+      {brandCss ? (
+        <style
+          // 內容是從色碼推導出來的十六進位字串，不含使用者自由輸入的文字
+          dangerouslySetInnerHTML={{ __html: brandCss }}
+        />
+      ) : null}
       <body className="min-h-full font-sans antialiased">
         {/* 鍵盤使用者的跳過導覽連結 */}
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-xl focus:bg-brand-500 focus:px-4 focus:py-2 focus:font-bold focus:text-white"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-xl focus:bg-brand-500 focus:px-4 focus:py-2 focus:font-bold focus:text-(--color-brand-on)"
         >
           跳到主要內容
         </a>

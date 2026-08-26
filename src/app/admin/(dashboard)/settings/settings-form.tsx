@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 
 import { saveSettingsAction } from './actions';
+import { LogoUploader } from './logo-uploader';
 import { Button, Card } from '@/components/ui';
 import type { Settings } from '@/lib/types';
 
@@ -26,6 +27,14 @@ export function SettingsForm({ settings }: { settings: Settings }) {
       ) : null}
 
       <Section title="品牌">
+        {/*
+          上傳獨立於這張表單之外。上傳是即時生效的動作，設定則要按
+          「儲存設定」才送出，混在一起會讓人不確定圖存了沒。
+        */}
+        <Field label="店家大頭貼">
+          <LogoUploader current={settings.logo_url} />
+        </Field>
+
         <Field label="店名">
           <Text name="shop_name" defaultValue={settings.shop_name} />
         </Field>

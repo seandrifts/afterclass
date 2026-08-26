@@ -141,7 +141,7 @@ function BatchCard({ batch }: { batch: BatchRow }) {
         <button
           type="submit"
           disabled={pending || batch.counts.inactive === 0}
-          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-bold text-(--color-brand-on) disabled:opacity-40"
         >
           {pending ? '啟用中⋯' : '啟用'}
         </button>

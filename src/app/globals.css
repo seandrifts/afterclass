@@ -13,6 +13,9 @@
   --color-brand-800: #8a271b;
   --color-brand-900: #702319;
 
+  /* 主色上面的文字顏色。依主色亮度自動切換，見 src/lib/theme.ts */
+  --color-brand-on: #ffffff;
+
   --color-ink: #1c1917;
   --color-ink-soft: #57534e;
   --color-ink-faint: #a8a29e;

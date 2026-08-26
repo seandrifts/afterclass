@@ -39,6 +39,89 @@ const schema = z.object({
   rules_content: z.string().max(20000),
 });
 
+/** Logo 允許的格式與大小。跟 bucket 上的限制一致 */
+const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * 上傳店家大頭貼。
+ *
+ * 檔名帶時間戳而不是固定名稱，這樣換圖之後客人的瀏覽器與 LINE 的
+ * 預覽快取會立刻拿到新的，不會卡著舊圖不放。
+ */
+export async function uploadLogoAction(_prev: unknown, formData: FormData) {
+  const owner = await requireOwner();
+
+  const file = formData.get('logo');
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: '請選擇圖片檔' };
+  }
+
+  if (!LOGO_TYPES.includes(file.type)) {
+    return { error: '只接受 PNG、JPG、WebP 或 SVG' };
+  }
+  if (file.size > LOGO_MAX_BYTES) {
+    return { error: `檔案太大（${Math.round(file.size / 1024)} KB），上限 2 MB` };
+  }
+
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+  const path = `logo-${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await db()
+    .storage.from('brand')
+    .upload(path, file, { contentType: file.type, upsert: true });
+
+  if (uploadError) {
+    return { error: `上傳失敗：${uploadError.message}` };
+  }
+
+  const {
+    data: { publicUrl },
+  } = db().storage.from('brand').getPublicUrl(path);
+
+  const { error } = await db()
+    .from('settings')
+    .update({ logo_url: publicUrl, updated_at: new Date().toISOString() })
+    .eq('id', 1);
+
+  if (error) return { error: '儲存失敗' };
+
+  await db().from('audit_logs').insert({
+    actor_type: 'staff',
+    actor_id: owner.sid,
+    action: 'upload_logo',
+    target_type: 'settings',
+    detail: { path, size: file.size },
+  });
+
+  revalidatePath('/admin/settings');
+  revalidatePath('/', 'layout');
+  return { saved: true, url: publicUrl };
+}
+
+export async function removeLogoAction() {
+  const owner = await requireOwner();
+
+  const { error } = await db()
+    .from('settings')
+    .update({ logo_url: null, updated_at: new Date().toISOString() })
+    .eq('id', 1);
+
+  if (error) return { error: '移除失敗' };
+
+  await db().from('audit_logs').insert({
+    actor_type: 'staff',
+    actor_id: owner.sid,
+    action: 'remove_logo',
+    target_type: 'settings',
+    detail: {},
+  });
+
+  revalidatePath('/admin/settings');
+  revalidatePath('/', 'layout');
+  return { saved: true };
+}
+
 export async function saveSettingsAction(_prev: unknown, formData: FormData) {
   const owner = await requireOwner();
 
@@ -87,6 +170,8 @@ export async function saveSettingsAction(_prev: unknown, formData: FormData) {
 
   revalidatePath('/admin/settings');
   revalidatePath('/admin');
+  // 主色與店名寫在 root layout，要整站重新取得才會生效
+  revalidatePath('/', 'layout');
 
   /**
    * 縮短到期天數不追溯既有餘額。
