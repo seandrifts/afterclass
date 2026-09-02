@@ -1,8 +1,15 @@
 'use client';
 
-import { useActionState, useEffect, useRef, useState } from 'react';
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import {
+  drawForMemberAction,
   issueTokenAction,
   logoutAction,
   lookupAction,
@@ -17,14 +24,17 @@ import {
   IconUndo,
 } from '@/components/icons';
 import { ScanInput } from '@/components/qr-scanner';
+import { isBig, Reel } from '@/components/reel';
 import {
   playErrorSound,
   playRedeemSuccessSound,
+  playWinSound,
   unlockAudio,
 } from '@/lib/sound';
+import type { Prize } from '@/lib/types';
 import { Button, Card } from '@/components/ui';
 
-type Tab = 'redeem' | 'coupon' | 'issue';
+type Tab = 'draw' | 'redeem' | 'coupon' | 'issue';
 
 interface LookedUpUser {
   id: string;
@@ -43,9 +53,11 @@ export function StaffPanel({
   staffName,
   isOwner,
   stats,
+  prizes,
 }: {
   staffName: string;
   isOwner: boolean;
+  prizes: Prize[];
   stats: {
     issued: number;
     drawn: number;
@@ -53,7 +65,13 @@ export function StaffPanel({
     redeemedTotal: number;
   };
 }) {
-  const [tab, setTab] = useState<Tab>('redeem');
+  /*
+    預設停在「掃碼抽獎」。
+
+    這是每一單都會用到的動作，折抵只有想用點數的客人才需要。把最常
+    按的放在第一個，尖峰時段少一次點擊。
+  */
+  const [tab, setTab] = useState<Tab>('draw');
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md px-4 py-5">
@@ -86,7 +104,10 @@ export function StaffPanel({
         />
       </div>
 
-      <nav className="mb-5 grid grid-cols-3 gap-2">
+      <nav className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <TabButton active={tab === 'draw'} onClick={() => setTab('draw')}>
+          掃碼抽獎
+        </TabButton>
         <TabButton active={tab === 'redeem'} onClick={() => setTab('redeem')}>
           折抵點數
         </TabButton>
@@ -98,10 +119,151 @@ export function StaffPanel({
         </TabButton>
       </nav>
 
+      {tab === 'draw' ? <DrawTab prizes={prizes} /> : null}
       {tab === 'redeem' ? <RedeemTab /> : null}
       {tab === 'coupon' ? <CouponTab /> : null}
       {tab === 'issue' ? <IssueTab /> : null}
     </main>
+  );
+}
+
+/**
+ * 掃客人的會員碼，當場在 iPad 上抽獎。
+ *
+ * 客人先掃櫃檯的加入會員 QR 成為會員，打開自己的會員碼給店員掃，
+ * 抽獎在店裡完成，獎品直接進他的錢包。少掉客人自己掃碼、LINE 登入、
+ * 30 分鐘領取時限這三個最會出事的環節。
+ *
+ * 轉盤跟客人端用同一個元件，動畫與機率不會兩邊各走各的。
+ */
+function DrawTab({ prizes }: { prizes: Prize[] }) {
+  const [state, action, pending] = useActionState(drawForMemberAction, null);
+
+  const result = state && 'prize' in state ? state : null;
+  const error = state && 'error' in state ? state.error : null;
+
+  /*
+    server action 回來的那一刻結果就到了，但轉盤要先空轉一段才好看。
+    phase 讓畫面自己走完 空轉 → 減速 → 揭曉，跟客人端同一套節奏。
+  */
+  const [settled, setSettled] = useState(false);
+
+  const announced = useRef<string | null>(null);
+  useEffect(() => {
+    if (!error || announced.current === error) return;
+    announced.current = error;
+    playErrorSound();
+  }, [error]);
+
+  const handleLanded = useCallback(() => {
+    setSettled(true);
+    if (result) playWinSound(isBig(result.prize, prizes));
+  }, [result, prizes]);
+
+  if (result) {
+    const big = isBig(result.prize, prizes);
+
+    return (
+      <div className="space-y-4">
+        <p className="text-center text-lg font-bold text-ink-soft">
+          {result.memberName}
+        </p>
+
+        <Reel
+          prizes={prizes}
+          target={result.prize}
+          spinning={!settled}
+          landing={!settled}
+          settled={settled}
+          instant={false}
+          celebrate={settled && big}
+          onLanded={handleLanded}
+        />
+
+        {settled ? (
+          <>
+            <Card className="text-center">
+              <p className="text-sm text-ink-soft">抽中</p>
+              <p
+                className={`mt-2 text-4xl font-black text-balance ${
+                  big ? 'text-amber-600' : 'text-brand-600'
+                }`}
+              >
+                {result.prize.name}
+              </p>
+
+              {result.creditAdded > 0 ? (
+                <p className="mt-3 text-lg">
+                  已存入錢包，目前{' '}
+                  <strong className="tabular text-2xl">
+                    {result.newBalance}
+                  </strong>{' '}
+                  元
+                </p>
+              ) : null}
+
+              {/*
+                實物券與免單不是進餘額而是產生一張券。核銷碼顯示出來，
+                店員可以當場核銷，不必請客人再翻一次手機
+              */}
+              {result.redeemCode ? (
+                <div className="mt-4 rounded-xl bg-amber-50 p-3">
+                  <p className="text-sm text-ink-soft">核銷碼</p>
+                  <p className="tabular text-3xl font-black tracking-widest text-amber-700">
+                    {result.redeemCode}
+                  </p>
+                  <p className="mt-1 text-xs text-ink-faint">
+                    券也在客人錢包裡，可之後再核銷
+                  </p>
+                </div>
+              ) : null}
+            </Card>
+
+            <Button size="lg" onClick={() => window.location.reload()}>
+              下一位
+            </Button>
+          </>
+        ) : (
+          <p
+            className="text-center text-ink-soft"
+            role="status"
+            aria-live="polite"
+          >
+            結果揭曉中
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <form action={action} className="space-y-4" onSubmit={() => unlockAudio()}>
+      <Card>
+        <ScanInput
+          name="walletCode"
+          label="客人的會員碼"
+          placeholder="掃描或輸入"
+        />
+        <p className="mt-3 text-sm leading-relaxed text-ink-faint">
+          請客人打開錢包頁的 QR。還不是會員的話，請他先掃櫃檯的加入會員
+          QR。
+        </p>
+      </Card>
+
+      {error ? (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-bad"
+        >
+          <IconAlert className="mt-0.5 size-4 shrink-0" />
+          {error}
+        </p>
+      ) : null}
+
+      <Button type="submit" size="lg" loading={pending}>
+        {pending ? '抽獎中' : '開始抽獎'}
+      </Button>
+    </form>
   );
 }
 

@@ -1,9 +1,11 @@
 'use server';
 
 import { randomUUID } from 'node:crypto';
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
-import { generateDynamicCode, normalizeCode } from '@/lib/codes';
+import { generateDynamicCode, generateRedeemCode, normalizeCode } from '@/lib/codes';
+import { runDraw } from '@/lib/draw-server';
 import { env } from '@/lib/env';
 import { qrSvg } from '@/lib/qr';
 import { getSettings } from '@/lib/settings';
@@ -14,7 +16,9 @@ import {
 } from '@/lib/session';
 import { loginStaff, MIN_PIN_LENGTH } from '@/lib/staff';
 import { db } from '@/lib/supabase';
+import { clientIpHash } from '@/lib/ratelimit';
 import { getUserByWalletCode } from '@/lib/users';
+import type { PrizeSnapshot } from '@/lib/types';
 
 /** 查詢時往回看幾分鐘，判斷是不是剛剛才折抵過 */
 const RECENT_REDEEM_MINUTES = 10;
@@ -247,6 +251,120 @@ export async function issueTokenAction(): Promise<IssueResult> {
   const svg = await qrSvg(`${env.siteUrl}/d/${code}`, 240);
 
   return { code, ttl: settings.dynamic_token_ttl_sec, svg };
+}
+
+export type DrawForMemberResult =
+  | { error: string }
+  | {
+      memberName: string;
+      prize: PrizeSnapshot;
+      creditAdded: number;
+      newBalance: number;
+      /** 實物券或免單才有，店員要念給客人記或請他看錢包 */
+      redeemCode: string | null;
+    };
+
+/**
+ * 店員用 iPad 代客人抽獎。
+ *
+ * 客人掃櫃檯的入會 QR 加入會員，打開自己的會員碼給店員掃，抽獎在
+ * 店裡的 iPad 上完成，獎品當場進他的錢包。
+ *
+ * 跟客人自己掃碼那條路比起來少了兩個最會出事的環節：LINE 內建瀏覽器
+ * 的登入，以及 30 分鐘領取時限。客人手機沒電或沒網路也能抽。
+ *
+ * 這裡仍然照原本的規矩開一張 token 再抽，不是直接寫餘額。抽獎次數的
+ * 憑證、稽核紀錄、成本報表全部沿用同一套，不另闢蹊徑。
+ */
+export async function drawForMemberAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<DrawForMemberResult> {
+  const staff = await getStaffSession();
+  if (!staff) return { error: '請先登入' };
+
+  const walletCode = normalizeCode(String(formData.get('walletCode') ?? ''));
+  if (!walletCode) return { error: '請掃描客人的會員碼' };
+
+  const user = await getUserByWalletCode(walletCode);
+  if (!user) return { error: '查不到這組會員碼，請客人先掃櫃檯的加入會員 QR' };
+  if (user.is_blocked) return { error: '這個帳號已被停用' };
+
+  /*
+    先開一張只給這次用的 token。
+
+    有效期給得很短，因為它從產生到抽完都在同一個動作裡，不需要留給
+    客人掃。萬一中途失敗，這張很快就自己過期，不會變成可以被撿去用
+    的漏洞。
+  */
+  const code = generateDynamicCode();
+  const { error: insertError } = await db().from('draw_tokens').insert({
+    code,
+    kind: 'dynamic',
+    status: 'active',
+    issued_by: staff.sid,
+    issued_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 120_000).toISOString(),
+  });
+
+  if (insertError) return { error: '產生失敗，請再試一次' };
+
+  const outcome = await runDraw({
+    code,
+    ipHash: await clientIpHash(),
+    userId: user.id,
+  });
+
+  if (!outcome.ok) {
+    return { error: describeDrawError(outcome.error, outcome.reason) };
+  }
+
+  // 抽完立刻入帳。客人就站在櫃檯前，沒有「等他登入」這回事
+  const redeemCode = generateRedeemCode();
+  const { data: claim, error: claimError } = await db()
+    .rpc('claim_token', {
+      p_code: code,
+      p_user_id: user.id,
+      p_redeem_code: redeemCode,
+    })
+    .single<{
+      ok: boolean;
+      reason: string | null;
+      prize_type: string | null;
+      credit_added: number | null;
+      new_balance: number | null;
+      coupon_id: string | null;
+    }>();
+
+  if (claimError || !claim?.ok) {
+    return {
+      error:
+        '抽中了但入帳失敗，請到後台「點數」查這位客人並手動補上，不要重抽',
+    };
+  }
+
+  revalidatePath('/staff');
+
+  return {
+    memberName: user.display_name ?? '會員',
+    prize: outcome.prize,
+    creditAdded: claim.credit_added ?? 0,
+    newBalance: claim.new_balance ?? user.balance,
+    redeemCode: claim.coupon_id ? redeemCode : null,
+  };
+}
+
+function describeDrawError(error: string, reason?: string): string {
+  switch (error) {
+    case 'CAMPAIGN_CLOSED':
+      return reason ?? '活動目前暫停中';
+    case 'NO_PRIZES':
+      return '目前沒有可抽的獎項，請到後台確認';
+    case 'PRIZE_OUT_OF_STOCK':
+      return '獎項剛好發完了，請再試一次';
+    default:
+      return '抽獎失敗，請再試一次';
+  }
 }
 
 function describeRedeemError(raw: string): string {
