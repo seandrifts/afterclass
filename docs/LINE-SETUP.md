@@ -88,12 +88,26 @@ Settings → Environment Variables，新增三個：
 |---|---|
 | `LINE_CHANNEL_ID` | 同上 |
 | `LINE_CHANNEL_SECRET` | 同上 |
-| `SITE_URL` | `https://afterclass-psi.vercel.app` |
+| `SITE_URL` | `https://afterclass.party` |
 
 `SITE_URL` 雖然程式會自動從 Vercel 的系統變數推導，但 LINE 的
 callback 比對不容許任何差異，明確指定最保險。
 
 改完環境變數要**重新部署**才生效（Deployments → 最新那筆 → `⋯` → Redeploy）。
+
+### 換網域時的順序
+
+順序錯了會讓客人在店門口登入失敗：
+
+1. **先**到 LINE Developers 把新的 Callback URL 加進去
+   （`https://afterclass.party/auth/line/callback`）。LINE 允許同時
+   登錄多組，舊的先留著
+2. **再**改 Vercel 的 `SITE_URL` 並重新部署
+3. 跑 `node scripts/check-domain.mjs afterclass.party` 驗收
+4. 確認沒問題之後，舊的 Callback URL 才可以移除
+
+反過來做的話，中間那段時間 `redirect_uri` 會是 LINE 不認識的網址，
+登入直接 400。
 
 ---
 
