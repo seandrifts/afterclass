@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 import { IconCamera, IconKeyboard } from './icons';
 import { playScanSound } from '@/lib/sound';
@@ -79,17 +80,38 @@ export function ScanInput({
         video,
         (result) => {
           const text = extractCode(result.data);
-          setValue(text);
+
+          /*
+            這裡一定要用 flushSync。
+
+            這個 callback 來自 qr-scanner 函式庫，不在 React 的事件系統
+            裡，所以 setValue 會被排到之後才提交。原本是用
+            requestAnimationFrame 等一幀再送出，但那不保證 React 已經把
+            新值寫進 DOM —— 表單送出時讀到的是**舊值**，第一次掃就是
+            空字串，畫面顯示「請掃描客人的會員碼」，明明就掃到了。
+            第二次掃才會過，因為欄位裡還留著上一次的值。
+
+            flushSync 強制在這一行就把狀態提交完，下一行讀到的 DOM
+            必定是新值。
+          */
+          flushSync(() => {
+            setValue(text);
+            setState('idle');
+          });
+
           scanner.stop();
-          setState('idle');
 
           // 掃到就震一下並嗶一聲。店員在吵雜環境看不到也聽不到螢幕變化
           navigator.vibrate?.(60);
           playScanSound();
 
-          if (autoSubmit) {
-            requestAnimationFrame(() => inputRef.current?.form?.requestSubmit());
-          }
+          /*
+            掃到空字串就不要送出。
+
+            送出去只會換來「請掃描客人的會員碼」，店員明明掃到了卻看到
+            這句話，只會以為機器壞了。寧可什麼都不做讓他再掃一次。
+          */
+          if (autoSubmit && text) inputRef.current?.form?.requestSubmit();
         },
         {
           highlightScanRegion: true,
