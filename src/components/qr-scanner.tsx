@@ -216,8 +216,25 @@ export function ScanInput({
           setValue(cleaned);
         }}
         onKeyDown={(e) => {
-          // 部分機型送的是 Tab 而不是 Enter，兩種都當成「掃完了」
-          if (e.key === 'Tab' && value.length > 0 && autoSubmit) {
+          /*
+            條碼槍掃完會補送一個 Enter（少數機型送 Tab）。
+
+            autoSubmit 的欄位這正好就是「掃完了，送出吧」的訊號。但
+            不是每個欄位掃完就該送出 —— 送獎項還要再選獎項、填原因，
+            掃到會員碼就送出的話，換來的是「請選擇要送出的獎項」，
+            店員會以為機器壞了。
+
+            所以 autoSubmit 關掉時要主動吃掉 Enter。Enter 在表單裡預設
+            就會送出，不攔的話「不自動送出」這個設定等於沒有作用。
+          */
+          if (e.key !== 'Enter' && e.key !== 'Tab') return;
+
+          if (!autoSubmit) {
+            if (e.key === 'Enter') e.preventDefault();
+            return;
+          }
+
+          if (e.key === 'Tab' && value.length > 0) {
             e.preventDefault();
             inputRef.current?.form?.requestSubmit();
           }

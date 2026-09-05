@@ -893,8 +893,8 @@ function GiftTab({ prizes }: { prizes: Prize[] }) {
 
   // 同 AdjustForm：server action 完成後 React 會重置表單，
   // 兩段式確認必須自己把值留住
-  const [form, setForm] = useState({ walletCode: '', prizeId: '', note: '' });
-  const bind = (k: 'walletCode' | 'prizeId' | 'note') => ({
+  const [form, setForm] = useState({ prizeId: '', note: '' });
+  const bind = (k: 'prizeId' | 'note') => ({
     value: form[k],
     onChange: (e: { target: { value: string } }) =>
       setForm((f) => ({ ...f, [k]: e.target.value })),
@@ -973,17 +973,17 @@ function GiftTab({ prizes }: { prizes: Prize[] }) {
   return (
     <form action={action} className="space-y-4">
       <Card className="space-y-4">
-        <label className="block">
-          <span className="text-sm font-bold text-ink-soft">客人的會員碼</span>
-          <input
-            name="walletCode"
-            {...bind('walletCode')}
-            placeholder="掃描或輸入"
-            autoComplete="off"
-            autoCapitalize="characters"
-            className="mt-1 w-full rounded-xl border-2 border-line px-4 py-3 text-center text-xl font-bold uppercase transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
-          />
-        </label>
+        {/*
+          autoSubmit 關掉。這一欄掃完還要選獎項、填原因，掃到就送出的話
+          只會換來「請選擇要送出的獎項」。ScanInput 會連條碼槍補送的
+          Enter 一起吃掉。
+        */}
+        <ScanInput
+          name="walletCode"
+          label="客人的會員碼"
+          placeholder="掃描或輸入"
+          autoSubmit={false}
+        />
 
         <label className="block">
           <span className="text-sm font-bold text-ink-soft">送出的獎項</span>
