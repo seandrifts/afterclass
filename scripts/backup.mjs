@@ -24,6 +24,7 @@ import {
   readdirSync,
   readFileSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -182,7 +183,24 @@ async function backup() {
   writeFileSync(file, JSON.stringify(dump, null, 2));
 
   const kb = Math.round(statSync(file).size / 1024);
-  console.log(`\n  ${file}  ${kb} KB  共 ${total} 筆\n`);
+  console.log(`\n  ${file}  ${kb} KB  共 ${total} 筆`);
+
+  /*
+    只留最近 KEEP 份。
+
+    每週跑一次的話這是三個月。備份的價值在「最近的那幾份」與「出事前
+    的那一份」，留太久只是佔空間 —— 而且裡面是客人的個資，留著不用的
+    份數越多，外洩時的範圍越大。
+  */
+  const KEEP = 12;
+  const old = readdirSync(dir)
+    .filter((f) => f.startsWith('afterclass-') && f.endsWith('.json'))
+    .sort()
+    .slice(0, -KEEP);
+
+  for (const f of old) unlinkSync(path.join(dir, f));
+  if (old.length) console.log(`  （已清掉 ${old.length} 份較舊的備份，保留最近 ${KEEP} 份）`);
+  console.log('');
 
   // 立刻讀回來驗一次。寫壞的備份跟沒有備份一樣，但更危險
   await verify(file);

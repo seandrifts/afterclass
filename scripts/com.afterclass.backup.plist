@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  下課後點心坊 抽獎系統 — 每週自動備份
+
+  Supabase 免費方案沒有自動備份，這個排程每週一凌晨三點把資料匯出到
+  ~/Downloads/lucky-draw/backups/，並自動驗證備份可還原。
+
+  電腦睡著時不會執行，但 launchd 會在下次喚醒後補跑，所以不會整週漏掉。
+
+  停用：launchctl unload ~/Library/LaunchAgents/com.afterclass.backup.plist
+  立即跑一次：launchctl start com.afterclass.backup
+  看紀錄：cat ~/Downloads/lucky-draw/backups/backup.log
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.afterclass.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>--env-file=.env.local</string>
+    <string>scripts/backup.mjs</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/jerryzhang/Downloads/lucky-draw</string>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>3</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+
+  <!-- 電腦在排程時間是睡的，醒來後補跑一次 -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!--
+    不加這個的話 launchd 會把它當背景工作重度節流 I/O，
+    實測從手動的 4 秒變成 2 分多鐘。凌晨跑其實無所謂，
+    但拖那麼久沒有理由。
+  -->
+  <key>ProcessType</key>
+  <string>Standard</string>
+
+  <key>Nice</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/jerryzhang/Downloads/lucky-draw/backups/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jerryzhang/Downloads/lucky-draw/backups/backup.log</string>
+</dict>
+</plist>
