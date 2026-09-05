@@ -3,11 +3,9 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireOwner } from '@/lib/auth-guard';
-import { generateDynamicCode, generateRedeemCode } from '@/lib/codes';
-import { toSnapshot } from '@/lib/draw';
+import { grantPrize } from '@/lib/grant';
 import { db } from '@/lib/supabase';
 import { getUserByWalletCode } from '@/lib/users';
-import type { Prize } from '@/lib/types';
 
 const SINGLE_ADJUST_CAP = 500;
 
@@ -111,106 +109,26 @@ export async function grantPrizeAction(
 ): Promise<GrantResult> {
   const owner = await requireOwner();
 
-  const walletCode = String(formData.get('walletCode') ?? '')
-    .trim()
-    .toUpperCase();
-  const prizeId = String(formData.get('prizeId') ?? '');
-  const note = String(formData.get('note') ?? '').trim();
-  const confirmed = formData.get('confirmed') === 'true';
-
-  if (!walletCode) return { error: '請輸入會員碼' };
-  if (!prizeId) return { error: '請選擇要送出的獎項' };
-  if (!note) return { error: '請填寫原因，之後對帳才知道這筆是哪個活動' };
-
-  const user = await getUserByWalletCode(walletCode);
-  if (!user) return { error: '查不到這組會員碼' };
-  if (user.is_blocked) return { error: '這個帳號已被停用' };
-
-  const { data: prize } = await db()
-    .from('prizes')
-    .select('*')
-    .eq('id', prizeId)
-    .maybeSingle();
-
-  if (!prize) return { error: '找不到這個獎項' };
-
-  // 高面額的要再確認一次。送錯免單跟送錯一元的代價差很多
-  if (prize.face_value > GRANT_CONFIRM_ABOVE && !confirmed) {
-    return {
-      needsConfirm: true,
-      error: `「${prize.name}」面額 ${prize.face_value} 元，請確認是要送給「${user.display_name ?? '這位會員'}」。`,
-    };
-  }
-
-  const code = generateDynamicCode();
-  const { error: tokenError } = await db().from('draw_tokens').insert({
-    code,
-    kind: 'dynamic',
-    status: 'active',
-    issued_by: owner.sid,
-    issued_at: new Date().toISOString(),
-    expires_at: new Date(Date.now() + 120_000).toISOString(),
+  // 老闆在後台送不設面額上限。上限是給店員端的
+  const outcome = await grantPrize({
+    walletCode: String(formData.get('walletCode') ?? ''),
+    prizeId: String(formData.get('prizeId') ?? ''),
+    note: String(formData.get('note') ?? ''),
+    actorId: owner.sid,
+    confirmed: formData.get('confirmed') === 'true',
+    confirmAbove: GRANT_CONFIRM_ABOVE,
+    maxFaceValue: null,
   });
 
-  if (tokenError) return { error: '建立失敗，請再試一次' };
-
-  const { data: drawn, error: drawError } = await db()
-    .rpc('commit_draw', {
-      p_code: code,
-      p_prize_id: prize.id,
-      p_snapshot: toSnapshot(prize as Prize),
-      p_ip_hash: null,
-    })
-    .single<{ ok: boolean; reason: string | null }>();
-
-  if (drawError || !drawn?.ok) {
-    return {
-      error:
-        drawn?.reason === 'PRIZE_OUT_OF_STOCK'
-          ? `「${prize.name}」的庫存已經發完了`
-          : '建立失敗，請再試一次',
-    };
+  if (!outcome.ok) {
+    return { error: outcome.error, needsConfirm: outcome.needsConfirm };
   }
-
-  const redeemCode = generateRedeemCode();
-  const { data: claim, error: claimError } = await db()
-    .rpc('claim_token', {
-      p_code: code,
-      p_user_id: user.id,
-      p_redeem_code: redeemCode,
-    })
-    .single<{
-      ok: boolean;
-      credit_added: number | null;
-      new_balance: number | null;
-      coupon_id: string | null;
-    }>();
-
-  if (claimError || !claim?.ok) {
-    return { error: '獎項已扣庫存但入帳失敗，請重新整理確認後再處理' };
-  }
-
-  await db().from('audit_logs').insert({
-    actor_type: 'staff',
-    actor_id: owner.sid,
-    action: 'grant_prize',
-    target_type: 'user',
-    target_id: user.id,
-    detail: {
-      prize: prize.name,
-      face_value: prize.face_value,
-      cost: prize.cost,
-      note,
-    },
-  });
 
   revalidatePath('/admin/credits');
 
   return {
     saved: true,
-    message: claim.credit_added
-      ? `已送出「${prize.name}」，${user.display_name ?? '會員'} 目前 ${claim.new_balance} 元`
-      : `已送出「${prize.name}」給 ${user.display_name ?? '會員'}`,
-    redeemCode: claim.coupon_id ? redeemCode : null,
+    message: outcome.message,
+    redeemCode: outcome.redeemCode,
   };
 }

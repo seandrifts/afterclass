@@ -35,6 +35,8 @@ const schema = z.object({
 
   pity_enabled: z.coerce.boolean(),
   pity_threshold: z.coerce.number().int().min(1),
+  // 0 = 不開放店員送獎項。上限不設天花板，老闆自己決定
+  staff_grant_max_value: z.coerce.number().int().min(0),
 
   rules_content: z.string().max(20000),
 });

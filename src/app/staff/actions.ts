@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 
 import { generateDynamicCode, generateRedeemCode, normalizeCode } from '@/lib/codes';
 import { runDraw } from '@/lib/draw-server';
+import { grantPrize } from '@/lib/grant';
 import { env } from '@/lib/env';
 import { qrSvg } from '@/lib/qr';
 import { getSettings } from '@/lib/settings';
@@ -374,4 +375,53 @@ function describeRedeemError(raw: string): string {
   if (raw.includes('EXCEEDS_PER_VISIT_LIMIT')) return '超過單次折抵上限';
   if (raw.includes('INVALID_AMOUNT')) return '折抵金額不正確';
   return '折抵失敗，請再試一次';
+}
+
+export type StaffGrantResult =
+  | { error: string; needsConfirm?: boolean }
+  | { saved: true; message: string; redeemCode: string | null };
+
+/**
+ * 店員在現場送指定獎項。
+ *
+ * 跟後台走同一段程式（lib/grant.ts），差別只在面額上限：老闆不設限，
+ * 店員受 settings.staff_grant_max_value 限制。
+ *
+ * 上限在這裡再擋一次，不能只靠前端的下拉選單 —— 那只是介面，有人直接
+ * 送出超出範圍的 prizeId 時要擋得住。
+ */
+export async function staffGrantAction(
+  _prev: unknown,
+  formData: FormData,
+): Promise<StaffGrantResult> {
+  const staff = await getStaffSession();
+  if (!staff) return { error: '請先登入' };
+
+  const settings = await getSettings();
+  if (settings.staff_grant_max_value <= 0) {
+    return { error: '目前沒有開放店員送獎項，請洽老闆從後台設定' };
+  }
+
+  const outcome = await grantPrize({
+    walletCode: String(formData.get('walletCode') ?? ''),
+    prizeId: String(formData.get('prizeId') ?? ''),
+    note: String(formData.get('note') ?? ''),
+    actorId: staff.sid,
+    confirmed: formData.get('confirmed') === 'true',
+    // 店員端每一筆都要確認。現場人多手快，送錯的機會比後台高
+    confirmAbove: 0,
+    maxFaceValue: settings.staff_grant_max_value,
+  });
+
+  if (!outcome.ok) {
+    return { error: outcome.error, needsConfirm: outcome.needsConfirm };
+  }
+
+  revalidatePath('/staff');
+
+  return {
+    saved: true,
+    message: outcome.message,
+    redeemCode: outcome.redeemCode,
+  };
 }

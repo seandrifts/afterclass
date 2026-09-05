@@ -10,6 +10,7 @@ import {
 
 import {
   drawForMemberAction,
+  staffGrantAction,
   issueTokenAction,
   logoutAction,
   lookupAction,
@@ -36,7 +37,7 @@ import {
 import type { Prize } from '@/lib/types';
 import { Button, Card } from '@/components/ui';
 
-type Tab = 'draw' | 'redeem' | 'coupon' | 'issue';
+type Tab = 'draw' | 'redeem' | 'coupon' | 'gift' | 'issue';
 
 interface LookedUpUser {
   id: string;
@@ -56,10 +57,13 @@ export function StaffPanel({
   isOwner,
   stats,
   prizes,
+  giftable,
 }: {
   staffName: string;
   isOwner: boolean;
   prizes: Prize[];
+  /** 店員可送出的獎項（已依面額上限篩選過）。空陣列代表沒開放 */
+  giftable: Prize[];
   stats: {
     issued: number;
     drawn: number;
@@ -118,7 +122,7 @@ export function StaffPanel({
         />
       </div>
 
-      <nav className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <nav className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <TabButton active={tab === 'draw'} onClick={() => setTab('draw')}>
           掃碼抽獎
         </TabButton>
@@ -128,6 +132,11 @@ export function StaffPanel({
         <TabButton active={tab === 'coupon'} onClick={() => setTab('coupon')}>
           核銷券
         </TabButton>
+        {giftable.length > 0 ? (
+          <TabButton active={tab === 'gift'} onClick={() => setTab('gift')}>
+            送獎項
+          </TabButton>
+        ) : null}
         <TabButton active={tab === 'issue'} onClick={() => setTab('issue')}>
           發抽獎
         </TabButton>
@@ -136,6 +145,7 @@ export function StaffPanel({
       {tab === 'draw' ? <DrawTab prizes={prizes} /> : null}
       {tab === 'redeem' ? <RedeemTab /> : null}
       {tab === 'coupon' ? <CouponTab /> : null}
+      {tab === 'gift' ? <GiftTab prizes={giftable} /> : null}
       {tab === 'issue' ? <IssueTab /> : null}
     </main>
   );
@@ -861,5 +871,131 @@ function IssueTab() {
         {busy ? '產生中' : '產生抽獎 QR'}
       </Button>
     </div>
+  );
+}
+
+/**
+ * 店員在現場送指定獎項。
+ *
+ * 跟後台的送獎項走同一段程式，差別是有面額上限（老闆在設定頁調整），
+ * 而且**每一筆都要二次確認** —— 現場人多手快，送錯的機會比後台高，
+ * 而送出去的東西收不回來。
+ *
+ * 下拉選單只列得出上限內的獎項，但那只是介面；伺服器端會再擋一次。
+ */
+function GiftTab({ prizes }: { prizes: Prize[] }) {
+  const [state, action, pending] = useActionState(staffGrantAction, null);
+  const needsConfirm = state && 'needsConfirm' in state && state.needsConfirm;
+  const redeemCode = state && 'redeemCode' in state ? state.redeemCode : null;
+  const error = state && 'error' in state ? state.error : null;
+
+  // 同 AdjustForm：server action 完成後 React 會重置表單，
+  // 兩段式確認必須自己把值留住
+  const [form, setForm] = useState({ walletCode: '', prizeId: '', note: '' });
+  const bind = (k: 'walletCode' | 'prizeId' | 'note') => ({
+    value: form[k],
+    onChange: (e: { target: { value: string } }) =>
+      setForm((f) => ({ ...f, [k]: e.target.value })),
+  });
+
+  const announced = useRef<string | null>(null);
+  useEffect(() => {
+    if (!error || announced.current === error || needsConfirm) return;
+    announced.current = error;
+    playErrorSound();
+  }, [error, needsConfirm]);
+
+  if (state && 'saved' in state && state.saved) {
+    return (
+      <div className="rounded-card bg-good p-8 text-center text-white">
+        <IconCheck className="mx-auto size-16" />
+        <p className="mt-4 text-2xl font-black text-balance">{state.message}</p>
+        {redeemCode ? (
+          <div className="mt-4 rounded-xl bg-white/20 p-3">
+            <p className="text-sm">核銷碼</p>
+            <p className="tabular text-3xl font-black tracking-widest">
+              {redeemCode}
+            </p>
+          </div>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-8 min-h-14 w-full cursor-pointer rounded-xl bg-white text-lg font-black text-good"
+        >
+          下一位
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form action={action} className="space-y-4">
+      <Card className="space-y-4">
+        <label className="block">
+          <span className="text-sm font-bold text-ink-soft">客人的會員碼</span>
+          <input
+            name="walletCode"
+            {...bind('walletCode')}
+            placeholder="掃描或輸入"
+            autoComplete="off"
+            autoCapitalize="characters"
+            className="mt-1 w-full rounded-xl border-2 border-line px-4 py-3 text-center text-xl font-bold uppercase transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-bold text-ink-soft">送出的獎項</span>
+          <select
+            name="prizeId"
+            {...bind('prizeId')}
+            className="mt-1 w-full cursor-pointer rounded-xl border-2 border-line px-4 py-3 text-lg transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+          >
+            <option value="">請選擇</option>
+            {prizes.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-bold text-ink-soft">原因</span>
+          <input
+            name="note"
+            {...bind('note')}
+            placeholder="例如：週年慶活動"
+            className="mt-1 w-full rounded-xl border-2 border-line px-4 py-3 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+          />
+        </label>
+      </Card>
+
+      <input
+        type="hidden"
+        name="confirmed"
+        value={needsConfirm ? 'true' : 'false'}
+      />
+
+      {error ? (
+        <p
+          role="alert"
+          className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm ${
+            needsConfirm ? 'bg-amber-50 text-warn' : 'bg-red-50 text-bad'
+          }`}
+        >
+          <IconAlert className="mt-0.5 size-4 shrink-0" />
+          {error}
+        </p>
+      ) : null}
+
+      <Button type="submit" size="lg" loading={pending}>
+        {needsConfirm ? '確定要送出' : '送出'}
+      </Button>
+
+      <p className="text-center text-xs leading-relaxed text-ink-faint">
+        送出去的獎項無法收回，只能請老闆從後台調整。
+      </p>
+    </form>
   );
 }

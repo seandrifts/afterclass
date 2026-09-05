@@ -186,6 +186,18 @@ export function SettingsForm({ settings }: { settings: Settings }) {
         </Field>
       </Section>
 
+      <Section title="店員權限">
+        <Field
+          label="店員可送出的獎項面額上限"
+          hint="店員端「送獎項」只會列出面額在這個數字以內的獎項，超過的送不出去。辦活動要送大獎時調高，活動結束記得調回來。填 0 等於完全不開放，你自己在後台送不受這個限制"
+        >
+          <Num
+            name="staff_grant_max_value"
+            defaultValue={settings.staff_grant_max_value}
+          />
+        </Field>
+      </Section>
+
       <Section title="活動辦法">
         <Field
           label="條款內容"

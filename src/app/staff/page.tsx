@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { StaffPanel } from './staff-panel';
 import { getStaffSession } from '@/lib/session';
 import { db } from '@/lib/supabase';
+import { getSettings } from '@/lib/settings';
 import { shopDayStart } from '@/lib/time';
 import type { Prize } from '@/lib/types';
 
@@ -13,6 +14,7 @@ export default async function StaffPage() {
   if (!session) redirect('/staff/login');
 
   const today = startOfToday();
+  const settings = await getSettings();
 
   // 今日統計。折抵金額是實際成本，比發放張數更該盯
   const [issued, drawn, redeemed, prizeRows] = await Promise.all([
@@ -44,6 +46,15 @@ export default async function StaffPage() {
       staffName={session.name}
       isOwner={session.role === 'owner'}
       prizes={(prizeRows.data ?? []) as Prize[]}
+      /*
+        店員能送的獎項在伺服器端就篩好，不要把整份清單送到前端再隱藏 ——
+        那樣「有哪些高價獎項」還是看得到，而且改一下 DOM 就能選。
+      */
+      giftable={((prizeRows.data ?? []) as Prize[]).filter(
+        (p) =>
+          settings.staff_grant_max_value > 0 &&
+          p.face_value <= settings.staff_grant_max_value,
+      )}
       stats={{
         issued: issued.count ?? 0,
         drawn: drawn.count ?? 0,

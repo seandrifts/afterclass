@@ -50,6 +50,9 @@ export interface Settings {
   pity_enabled: boolean;
   pity_threshold: number;
 
+  /** 店員在店員端可送出的獎項面額上限。0 = 不開放 */
+  staff_grant_max_value: number;
+
   push_enabled: boolean;
   push_expiry_enabled: boolean;
 
