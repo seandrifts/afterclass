@@ -22,7 +22,19 @@ import type { Prize } from './types';
  *   流水帳與 check_balance_integrity 都對得起來
  */
 export type GrantOutcome =
-  | { ok: false; error: string; needsConfirm?: boolean }
+  | {
+      ok: false;
+      error: string;
+      needsConfirm?: boolean;
+      /*
+        要求二次確認時，把伺服器**實際收到**的值原樣回傳。
+
+        確認那一步要送回這些值，而不是再讀一次表單。表單是活的：中間
+        有人改了會員碼、或前端狀態出了差錯，確認畫面說的跟真正送出的
+        就會是兩件事 —— 而這裡送出去的東西收不回來。
+      */
+      pending?: { walletCode: string; prizeId: string; note: string };
+    }
   | {
       ok: true;
       message: string;
@@ -83,7 +95,8 @@ export async function grantPrize(opts: {
     return {
       ok: false,
       needsConfirm: true,
-      error: `「${prize.name}」面額 ${prize.face_value} 元，請確認是要送給「${user.display_name ?? '這位會員'}」。`,
+      error: `確定要把「${prize.name}」（面額 ${prize.face_value} 元）送給「${user.display_name ?? '這位會員'}」嗎？`,
+      pending: { walletCode, prizeId: opts.prizeId, note: opts.note.trim() },
     };
   }
 

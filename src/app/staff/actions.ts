@@ -378,7 +378,11 @@ function describeRedeemError(raw: string): string {
 }
 
 export type StaffGrantResult =
-  | { error: string; needsConfirm?: boolean }
+  | {
+      error: string;
+      needsConfirm?: boolean;
+      pending?: { walletCode: string; prizeId: string; note: string };
+    }
   | { saved: true; message: string; redeemCode: string | null };
 
 /**
@@ -414,7 +418,11 @@ export async function staffGrantAction(
   });
 
   if (!outcome.ok) {
-    return { error: outcome.error, needsConfirm: outcome.needsConfirm };
+    return {
+      error: outcome.error,
+      needsConfirm: outcome.needsConfirm,
+      pending: outcome.pending,
+    };
   }
 
   revalidatePath('/staff');

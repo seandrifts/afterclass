@@ -886,6 +886,8 @@ function IssueTab() {
 function GiftTab({ prizes }: { prizes: Prize[] }) {
   const [state, action, pending] = useActionState(staffGrantAction, null);
   const needsConfirm = state && 'needsConfirm' in state && state.needsConfirm;
+  const confirming =
+    needsConfirm && state && 'pending' in state ? state.pending : null;
   const redeemCode = state && 'redeemCode' in state ? state.redeemCode : null;
   const error = state && 'error' in state ? state.error : null;
 
@@ -926,6 +928,45 @@ function GiftTab({ prizes }: { prizes: Prize[] }) {
           下一位
         </button>
       </div>
+    );
+  }
+
+  /*
+    確認階段是一張獨立的表單，只帶伺服器剛才回傳的值。
+
+    原本是沿用同一張表單、把 confirmed 改成 true 再送一次 —— 但那樣
+    送出的是「按下確認當下表單裡的東西」，不是「剛才確認過的東西」。
+    中間只要有人改了會員碼，或前端狀態出了差錯，畫面說的跟真正送出的
+    就是兩件事。而送出去的獎品收不回來。
+  */
+  if (confirming) {
+    return (
+      <form action={action} className="space-y-4">
+        <input type="hidden" name="walletCode" value={confirming.walletCode} />
+        <input type="hidden" name="prizeId" value={confirming.prizeId} />
+        <input type="hidden" name="note" value={confirming.note} />
+        <input type="hidden" name="confirmed" value="true" />
+
+        <Card className="text-center">
+          <IconAlert className="mx-auto size-10 text-warn" />
+          <p className="mt-3 text-xl leading-relaxed font-bold text-balance">
+            {error}
+          </p>
+          <p className="mt-3 text-sm text-ink-faint">原因：{confirming.note}</p>
+        </Card>
+
+        <Button type="submit" size="lg" loading={pending}>
+          確定要送出
+        </Button>
+
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="w-full cursor-pointer rounded text-center text-sm text-ink-faint underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+        >
+          取消
+        </button>
+      </form>
     );
   }
 
@@ -971,18 +1012,12 @@ function GiftTab({ prizes }: { prizes: Prize[] }) {
         </label>
       </Card>
 
-      <input
-        type="hidden"
-        name="confirmed"
-        value={needsConfirm ? 'true' : 'false'}
-      />
+      <input type="hidden" name="confirmed" value="false" />
 
       {error ? (
         <p
           role="alert"
-          className={`flex items-start gap-2 rounded-xl px-3 py-2 text-sm ${
-            needsConfirm ? 'bg-amber-50 text-warn' : 'bg-red-50 text-bad'
-          }`}
+          className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-bad"
         >
           <IconAlert className="mt-0.5 size-4 shrink-0" />
           {error}
@@ -990,7 +1025,7 @@ function GiftTab({ prizes }: { prizes: Prize[] }) {
       ) : null}
 
       <Button type="submit" size="lg" loading={pending}>
-        {needsConfirm ? '確定要送出' : '送出'}
+        送出
       </Button>
 
       <p className="text-center text-xs leading-relaxed text-ink-faint">

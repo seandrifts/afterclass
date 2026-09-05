@@ -87,7 +87,11 @@ export async function adjustAction(_prev: unknown, formData: FormData) {
 }
 
 export type GrantResult =
-  | { error: string; needsConfirm?: boolean }
+  | {
+      error: string;
+      needsConfirm?: boolean;
+      pending?: { walletCode: string; prizeId: string; note: string };
+    }
   | { saved: true; message: string; redeemCode: string | null };
 
 /**
@@ -121,7 +125,11 @@ export async function grantPrizeAction(
   });
 
   if (!outcome.ok) {
-    return { error: outcome.error, needsConfirm: outcome.needsConfirm };
+    return {
+      error: outcome.error,
+      needsConfirm: outcome.needsConfirm,
+      pending: outcome.pending,
+    };
   }
 
   revalidatePath('/admin/credits');
