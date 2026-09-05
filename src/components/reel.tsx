@@ -3,6 +3,7 @@
 import { type CSSProperties, useEffect, useRef } from 'react';
 
 import { IconGift } from '@/components/icons';
+import { playReelTick } from '@/lib/sound';
 import type { Prize, PrizeSnapshot } from '@/lib/types';
 
 /*
@@ -61,17 +62,6 @@ export function isBig(prize: PrizeSnapshot, prizes: Prize[]): boolean {
  * 兩段之間要接得看不出來。移除 CSS 動畫的瞬間元素會彈回原點，所以
  * 交棒時先把動畫當下的位置讀出來寫成 inline transform，強制回流之後
  * 再開始過渡，這樣起點就是眼睛看到的位置。
-/**
- * 轉軸動畫。
- *
- * 結果由後端決定，這裡只負責演出來。關鍵是分兩段：
- *
- *   spinning  還不知道結果，等速空轉，沒有落點
- *   landing   結果到了，從當下位置減速滑到該停的地方
- *
- * 兩段之間要接得看不出來。移除 CSS 動畫的瞬間元素會彈回原點，所以
- * 交棒時先把動畫當下的位置讀出來寫成 inline transform，強制回流之後
- * 再開始過渡，這樣起點就是眼睛看到的位置。
  */
 export function Reel({
   prizes,
@@ -109,6 +99,40 @@ export function Reel({
       spinStart.current = performance.now();
     }
   }, [spinning]);
+
+  /*
+    轉動的「喀喀」聲。
+
+    刻意不用固定節拍，而是讀轉軸真正的位置，每經過一個獎項就響一聲。
+    這樣減速時聲音會自己跟著慢下來 —— 喀喀喀…喀…喀……喀，最後停住。
+    那個由密到疏的過程就是轉盤的張力所在，用固定節拍或一段錄好的音檔
+    都做不出來，而且動畫時間一改就對不上。
+
+    高速時大約每秒十五下，跟實體拉霸機差不多。
+  */
+  useEffect(() => {
+    if (!spinning || instant) return;
+    const el = stripRef.current;
+    if (!el) return;
+
+    let raf = 0;
+    let lastSlot: number | null = null;
+
+    const watch = () => {
+      const raw = getComputedStyle(el).transform;
+      const y = raw && raw !== 'none' ? new DOMMatrixReadOnly(raw).m42 : 0;
+      const slot = Math.floor(Math.abs(y) / ITEM_H);
+
+      // 第一幀只記位置不發聲，否則一進畫面就會多響一下
+      if (lastSlot !== null && slot !== lastSlot) playReelTick();
+      lastSlot = slot;
+
+      raf = requestAnimationFrame(watch);
+    };
+
+    raf = requestAnimationFrame(watch);
+    return () => cancelAnimationFrame(raf);
+  }, [spinning, instant]);
 
   useEffect(() => {
     if (!landing || !target) return;

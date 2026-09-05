@@ -162,6 +162,37 @@ export function playScanSound() {
   tone(ctx, 1567.98, ctx.currentTime, 0.07, 0.08); // G6
 }
 
+/**
+ * 轉盤每經過一個獎項的「喀」聲。
+ *
+ * 不用 tone()，因為那個的起音有 15ms 斜坡 —— 在每秒十幾下的頻率下
+ * 聽起來會糊成一片嗡嗡聲，不像機械轉盤的清脆聲響。這裡把起音壓到
+ * 2ms、整個聲音只有 30ms，才會是「喀」而不是「嗡」。
+ *
+ * 音量刻意比其他音效小很多。它會連續響幾十下，用一般音量會蓋過
+ * 最後的中獎音，而那才是重點。
+ */
+export function playReelTick() {
+  if (!isSoundEnabled()) return;
+  // 這是在動畫的每一幀裡呼叫的，不能每次都去解鎖音訊
+  if (!ctx || ctx.state !== 'running') return;
+
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const vol = ctx.createGain();
+
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(1800, t);
+
+  vol.gain.setValueAtTime(0, t);
+  vol.gain.linearRampToValueAtTime(0.035, t + 0.002);
+  vol.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+
+  osc.connect(vol).connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.05);
+}
+
 /** 轉盤開始轉的提示音，很輕的一聲 */
 export function playSpinSound() {
   if (!isSoundEnabled()) return;
