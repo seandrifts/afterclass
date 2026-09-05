@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react';
 
-import { adjustAction } from './actions';
+import { adjustAction, grantPrizeAction } from './actions';
 import type { LedgerRow } from './page';
 import { Button, Card } from '@/components/ui';
 import { formatDateTime } from '@/lib/time';
@@ -20,6 +20,7 @@ export function CreditBoard({
   matchedUsers,
   warnDays,
   summary,
+  prizes,
 }: {
   ledger: LedgerRow[];
   query: string;
@@ -30,6 +31,7 @@ export function CreditBoard({
     balance: number;
   }[];
   warnDays: number;
+  prizes: { id: string; name: string; face_value: number; type: string }[];
   summary: {
     outstanding: number;
     outstandingPeople: number;
@@ -40,19 +42,37 @@ export function CreditBoard({
   };
 }) {
   const [adjusting, setAdjusting] = useState(false);
+  const [granting, setGranting] = useState(false);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-black">點數管理</h1>
-        <Button
-          type="button"
-          className="sm:w-auto sm:px-5"
-          size="sm"
-          onClick={() => setAdjusting((v) => !v)}
-        >
-          {adjusting ? '收起' : '人工調整'}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="sm:w-auto sm:px-5"
+            size="sm"
+            onClick={() => {
+              setGranting((v) => !v);
+              setAdjusting(false);
+            }}
+          >
+            {granting ? '收起' : '送獎項'}
+          </Button>
+          <Button
+            type="button"
+            className="sm:w-auto sm:px-5"
+            size="sm"
+            onClick={() => {
+              setAdjusting((v) => !v);
+              setGranting(false);
+            }}
+          >
+            {adjusting ? '收起' : '人工調整'}
+          </Button>
+        </div>
       </div>
 
       {summary.integrityBreaches > 0 ? (
@@ -63,6 +83,7 @@ export function CreditBoard({
         </p>
       ) : null}
 
+      {granting ? <GrantForm prizes={prizes} /> : null}
       {adjusting ? <AdjustForm /> : null}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -290,6 +311,22 @@ function AdjustForm() {
   const [state, action, pending] = useActionState(adjustAction, null);
   const needsConfirm = state && 'needsConfirm' in state && state.needsConfirm;
 
+  /*
+    欄位要自己存著。
+
+    React 19 的 <form action={serverAction}> 在動作完成後會把表單重置。
+    這裡有「超過 500 元請再確認一次」的兩段式流程 —— 第一次送出被擋下
+    之後欄位就被清空了，按下「確認調整」等於送出一張空表單，畫面回
+    「請輸入會員碼」。也就是說超過 500 元的調整從上線到現在**一次都
+    做不成**，而且錯誤訊息完全指不到真正的原因。
+  */
+  const [form, setForm] = useState({ walletCode: '', amount: '', note: '' });
+  const bind = (k: 'walletCode' | 'amount' | 'note') => ({
+    value: form[k],
+    onChange: (e: { target: { value: string } }) =>
+      setForm((f) => ({ ...f, [k]: e.target.value })),
+  });
+
   return (
     <Card>
       <form action={action} className="space-y-4">
@@ -298,6 +335,7 @@ function AdjustForm() {
             <span className="text-sm font-bold text-ink-soft">會員碼</span>
             <input
               name="walletCode"
+              {...bind('walletCode')}
               required
               autoCapitalize="characters"
               className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 mt-1 w-full rounded-xl border border-line px-3 py-2 uppercase"
@@ -320,6 +358,7 @@ function AdjustForm() {
           <span className="text-sm font-bold text-ink-soft">金額（元）</span>
           <input
             name="amount"
+              {...bind('amount')}
             type="number"
             min={1}
             required
@@ -333,6 +372,7 @@ function AdjustForm() {
           </span>
           <input
             name="note"
+              {...bind('note')}
             required
             placeholder="店員誤扣，補回"
             className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 mt-1 w-full rounded-xl border border-line px-3 py-2"
@@ -368,6 +408,122 @@ function AdjustForm() {
         <p className="text-xs leading-relaxed text-ink-faint">
           調整一律走跟店員端同一套資料庫函式，保證流水帳一定被寫入。
           後台不會、也不能直接改餘額數字。
+        </p>
+      </form>
+    </Card>
+  );
+}
+
+/**
+ * 指定獎項送給客人。
+ *
+ * 辦活動時用：不抽，直接把某個獎品放進客人錢包，他之後再來換。
+ *
+ * 跟人工調整分開是刻意的。調整是改一個數字，送獎項是發出一個有名字、
+ * 有條款、有到期日的東西 —— 客人錢包裡看到的是「免單券」而不是
+ * 「+150 元」，兩者對他的意義完全不同。
+ */
+function GrantForm({
+  prizes,
+}: {
+  prizes: { id: string; name: string; face_value: number; type: string }[];
+}) {
+  const [state, action, pending] = useActionState(grantPrizeAction, null);
+  const needsConfirm = state && 'needsConfirm' in state && state.needsConfirm;
+  const redeemCode =
+    state && 'redeemCode' in state ? state.redeemCode : null;
+
+  // 同 AdjustForm：React 完成 server action 之後會重置表單，
+  // 兩段式確認要自己把值留住，否則第二次送出的是空的
+  const [form, setForm] = useState({ walletCode: '', prizeId: '', note: '' });
+  const bind = (k: 'walletCode' | 'prizeId' | 'note') => ({
+    value: form[k],
+    onChange: (e: { target: { value: string } }) =>
+      setForm((f) => ({ ...f, [k]: e.target.value })),
+  });
+
+  return (
+    <Card>
+      <form action={action} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-bold text-ink-soft">會員碼</span>
+            <input
+              name="walletCode"
+              {...bind('walletCode')}
+              placeholder="客人錢包頁的那組碼"
+              autoComplete="off"
+              className="mt-1 w-full rounded-xl border border-line px-3 py-2 font-mono uppercase transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+            />
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-bold text-ink-soft">送出的獎項</span>
+            <select
+              name="prizeId"
+              {...bind('prizeId')}
+              className="mt-1 w-full cursor-pointer rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+            >
+              <option value="" disabled>
+                請選擇
+              </option>
+              {prizes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}（面額 {p.face_value} 元）
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <label className="block">
+          <span className="text-sm font-bold text-ink-soft">原因</span>
+          <input
+            name="note"
+            {...bind('note')}
+            placeholder="例如：週年慶抽獎活動、客訴補償"
+            className="mt-1 w-full rounded-xl border border-line px-3 py-2 transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+          />
+        </label>
+
+        <input
+          type="hidden"
+          name="confirmed"
+          value={needsConfirm ? 'true' : 'false'}
+        />
+
+        {state && 'error' in state && state.error ? (
+          <p
+            className={`rounded-xl px-4 py-3 text-sm ${
+              needsConfirm ? 'bg-amber-50 text-warn' : 'bg-red-50 text-bad'
+            }`}
+          >
+            {state.error}
+          </p>
+        ) : null}
+
+        {state && 'saved' in state && state.saved ? (
+          <div className="rounded-xl bg-green-50 px-4 py-3 text-sm text-good">
+            <p>{state.message}</p>
+            {redeemCode ? (
+              <p className="mt-2">
+                核銷碼{' '}
+                <strong className="tabular text-lg tracking-widest">
+                  {redeemCode}
+                </strong>
+                （券也在客人錢包裡）
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <Button type="submit" disabled={pending}>
+          {pending ? '處理中⋯' : needsConfirm ? '確認送出' : '送出'}
+        </Button>
+
+        <p className="text-xs leading-relaxed text-ink-faint">
+          走的是跟抽獎完全相同的路徑，所以庫存會扣、獎項內容會存快照、
+          成本報表也算得進去。這筆不會變成帳面上找不到來源的錢。
         </p>
       </form>
     </Card>

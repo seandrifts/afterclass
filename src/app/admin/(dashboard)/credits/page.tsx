@@ -69,7 +69,7 @@ export default async function CreditsPage(
   // 月初也要用店家時區，否則月初與月底那幾小時會歸錯月份
   const monthStart = shopMonthStart();
 
-  const [soon, all, expiredThisMonth, integrity] = await Promise.all([
+  const [soon, all, expiredThisMonth, integrity, prizeRows] = await Promise.all([
     db()
       .from('users')
       .select('balance')
@@ -82,6 +82,12 @@ export default async function CreditsPage(
       .eq('type', 'expire')
       .gte('created_at', monthStart),
     db().rpc('check_balance_integrity'),
+    // 送獎項的下拉選單。只列還在啟用的，停用的獎項不該再送出去
+    db()
+      .from('prizes')
+      .select('id, name, face_value, type')
+      .eq('is_active', true)
+      .order('sort_order'),
   ]);
 
   const sum = (rows: { balance: number }[] | null) =>
@@ -93,6 +99,7 @@ export default async function CreditsPage(
       query={query}
       matchedUsers={matchedUsers}
       warnDays={settings.expire_warn_days}
+      prizes={prizeRows.data ?? []}
       summary={{
         outstanding: sum(all.data),
         outstandingPeople: all.data?.length ?? 0,
