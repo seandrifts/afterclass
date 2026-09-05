@@ -99,6 +99,8 @@ export async function lookupAction(_prev: unknown, formData: FormData) {
     .maybeSingle();
 
   return {
+    // 掃碼抽獎那條路要拿這個碼再送一次，查詢與抽獎是分開的兩步
+    code,
     user: {
       id: user.id,
       name: user.display_name ?? '會員',

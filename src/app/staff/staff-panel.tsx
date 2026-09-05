@@ -20,6 +20,7 @@ import {
 import {
   IconAlert,
   IconCamera,
+  IconSparkle,
   IconCheck,
   IconUndo,
 } from '@/components/icons';
@@ -128,24 +129,30 @@ export function StaffPanel({
 }
 
 /**
- * 掃客人的會員碼，當場在 iPad 上抽獎。
+ * 掃客人的會員碼，讓客人自己按下抽獎。
  *
- * 客人先掃櫃檯的加入會員 QR 成為會員，打開自己的會員碼給店員掃，
- * 抽獎在店裡完成，獎品直接進他的錢包。少掉客人自己掃碼、LINE 登入、
- * 30 分鐘領取時限這三個最會出事的環節。
+ * 分成兩步是刻意的：
+ *
+ *   1. 店員掃碼 —— 只做查詢，確認是誰、餘額多少
+ *   2. 把 iPad 轉給客人，客人自己按 —— 這一按才真的抽
+ *
+ * 掃完就直接抽的話，客人從頭到尾沒碰到機器，中了小獎難免覺得
+ * 「是不是你們動了手腳」。讓他自己按下去，結果是什麼都是他自己的。
  *
  * 轉盤跟客人端用同一個元件，動畫與機率不會兩邊各走各的。
  */
 function DrawTab({ prizes }: { prizes: Prize[] }) {
-  const [state, action, pending] = useActionState(drawForMemberAction, null);
+  const [found, lookup, looking] = useActionState(lookupAction, null);
+  const [drawn, draw, drawing] = useActionState(drawForMemberAction, null);
 
-  const result = state && 'prize' in state ? state : null;
-  const error = state && 'error' in state ? state.error : null;
+  const member = found && 'user' in found ? found.user : null;
+  const walletCode = found && 'code' in found ? found.code : '';
+  const lookupError = found && 'error' in found ? found.error : null;
 
-  /*
-    server action 回來的那一刻結果就到了，但轉盤要先空轉一段才好看。
-    phase 讓畫面自己走完 空轉 → 減速 → 揭曉，跟客人端同一套節奏。
-  */
+  const result = drawn && 'prize' in drawn ? drawn : null;
+  const drawError = drawn && 'error' in drawn ? drawn.error : null;
+  const error = drawError ?? lookupError;
+
   const [settled, setSettled] = useState(false);
 
   const announced = useRef<string | null>(null);
@@ -160,27 +167,35 @@ function DrawTab({ prizes }: { prizes: Prize[] }) {
     if (result) playWinSound(isBig(result.prize, prizes));
   }, [result, prizes]);
 
-  if (result) {
-    const big = isBig(result.prize, prizes);
+  // ---------------------------------------------------------------
+  // 第三步：轉盤與結果
+  // ---------------------------------------------------------------
+  if (drawing || result) {
+    const big = result ? isBig(result.prize, prizes) : false;
 
     return (
       <div className="space-y-4">
         <p className="text-center text-lg font-bold text-ink-soft">
-          {result.memberName}
+          {member?.name}
         </p>
 
+        {/*
+          還在等伺服器時就先空轉，拿到結果才減速定位。跟客人端同一套
+          節奏 —— 結果還沒回來就先滑向某個獎項的話，客人會先看到那個
+          獎再被換掉
+        */}
         <Reel
           prizes={prizes}
-          target={result.prize}
+          target={result ? result.prize : null}
           spinning={!settled}
-          landing={!settled}
+          landing={!!result && !settled}
           settled={settled}
           instant={false}
           celebrate={settled && big}
           onLanded={handleLanded}
         />
 
-        {settled ? (
+        {settled && result ? (
           <>
             <Card className="text-center">
               <p className="text-sm text-ink-soft">抽中</p>
@@ -236,8 +251,64 @@ function DrawTab({ prizes }: { prizes: Prize[] }) {
     );
   }
 
+  // ---------------------------------------------------------------
+  // 第二步：確認是這位客人，把 iPad 轉過去給他按
+  // ---------------------------------------------------------------
+  if (member) {
+    return (
+      <form action={draw} className="space-y-5">
+        <input type="hidden" name="walletCode" value={walletCode} />
+
+        <Card className="text-center">
+          <p className="text-sm text-ink-soft">請確認是這位客人</p>
+          <p className="mt-2 text-3xl font-black text-balance">{member.name}</p>
+          <p className="mt-2 text-ink-soft">
+            目前 <span className="tabular font-bold">{member.balance}</span> 元
+          </p>
+        </Card>
+
+        <p className="text-center text-lg font-bold text-brand-600">
+          請把螢幕轉給客人
+        </p>
+
+        {error ? (
+          <p
+            role="alert"
+            className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-bad"
+          >
+            <IconAlert className="mt-0.5 size-4 shrink-0" />
+            {error}
+          </p>
+        ) : null}
+
+        {/* 客人自己按的那一下。做大一點，讓他知道這是給他按的 */}
+        <Button
+          type="submit"
+          size="lg"
+          loading={drawing}
+          onClick={() => unlockAudio()}
+          className="min-h-24 text-2xl"
+        >
+          <IconSparkle className="size-7" />
+          {drawing ? '抽獎中' : '按這裡抽獎'}
+        </Button>
+
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="w-full cursor-pointer rounded text-center text-sm text-ink-faint underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+        >
+          掃錯了，重新掃描
+        </button>
+      </form>
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // 第一步：店員掃客人的會員碼
+  // ---------------------------------------------------------------
   return (
-    <form action={action} className="space-y-4" onSubmit={() => unlockAudio()}>
+    <form action={lookup} className="space-y-4">
       <Card>
         <ScanInput
           name="walletCode"
@@ -260,12 +331,13 @@ function DrawTab({ prizes }: { prizes: Prize[] }) {
         </p>
       ) : null}
 
-      <Button type="submit" size="lg" loading={pending}>
-        {pending ? '抽獎中' : '開始抽獎'}
+      <Button type="submit" size="lg" loading={looking}>
+        {looking ? '查詢中' : '查詢客人'}
       </Button>
     </form>
   );
 }
+
 
 function Stat({
   label,
