@@ -16,10 +16,23 @@ import type { Prize, PrizeSnapshot } from '@/lib/types';
   是最傷的觀感，寧可多轉半秒也不能發生。
 */
 const ITEM_H = 132;
-const SPIN_MIN_MS = 900; // 最短空轉。網路太快時也要有「真的在轉」的感覺
+const SPIN_MIN_MS = 350; // 最短空轉。網路太快時也要有「真的在轉」的感覺
 const SPIN_SET_MS = 520; // 空轉繞完一圈的時間，決定等速階段的速度
-const LAND_MS = 2200; // 減速到定位
-const LAND_MIN_LOOPS = 3; // 減速期間至少再繞幾圈，才有慣性
+const LAND_MIN_LOOPS = 2; // 減速期間至少再繞幾圈，才有慣性
+
+/*
+  減速的平均速度（px/ms），時間由距離反推。
+
+  原本是固定 2200ms。但滑行距離會隨著「交棒時剛好轉到哪」與「抽中第幾
+  個獎項」差到一整圈（1056px），固定時間就代表速度忽快忽慢 —— 同一台
+  機器有時滑順有時暴衝，而且暴衝那次會在交棒瞬間明顯頓一下。
+
+  改成距離除以這個速度得到時間，每一次的手感就都一樣。搭配下面的曲線，
+  峰值是平均的 1.23 倍，剛好等於空轉速度，交棒接得上。
+
+  整段從按下到停穩約 1.6–2.2 秒，比原本的 3.1 秒短了三分之一以上。
+*/
+const LAND_SPEED = 1.65;
 
 /*
   減速曲線。
@@ -29,10 +42,11 @@ const LAND_MIN_LOOPS = 3; // 減速期間至少再繞幾圈，才有慣性
   是平均的 5.25 倍，換算成畫面就是空轉 34px/幀、一交棒變成 142px/幀，
   很明顯的頓挫。
 
-  這條的峰值是平均的 1.36 倍（約 37px/幀），接得上空轉；而且九成九的
-  距離在 2030ms 就走完，最後那一點只花 170ms，不會有停不下來的拖尾。
+  這條的峰值是平均的 1.23 倍。搭配 LAND_SPEED 之後換算成畫面，峰值
+  剛好落在空轉的 34px/幀 附近，交棒看不出接縫；九成九的距離在 93% 的
+  時間就走完，不會有停不下來的拖尾。
 */
-const LAND_EASE = 'cubic-bezier(0.33, 0.4, 0.66, 1)';
+const LAND_EASE = 'cubic-bezier(0.5, 0.55, 0.75, 1)';
 
 /**
  * 大獎判定。
@@ -158,21 +172,24 @@ export function Reel({
         落點要往前找，不能寫死。
 
         寫死圈數的話，滑行距離會隨著「交棒時剛好轉到哪」以及抽中第幾
-        個獎項而差到一整圈，同樣的 2.2 秒有時要滑 2100px 有時 4100px，
-        速度差一倍，快慢不一致。
+        個獎項而差到一整圈。
 
-        改成從目前位置往前推至少三圈，再往上取到最近一個對得上落點的
-        位置，滑行距離就穩定落在三到四圈之間。
+        改成從目前位置往前推至少兩圈，再往上取到最近一個對得上落點的
+        位置。距離仍會落在兩到三圈之間，但時間是由距離反推的（見
+        LAND_SPEED），所以速度恆定。
       */
       const set = prizes.length * ITEM_H;
       const least = Math.abs(at) + LAND_MIN_LOOPS * set;
       const loops = Math.ceil((least - landIndex * ITEM_H) / set);
       const final = loops * set + landIndex * ITEM_H;
 
-      el.style.transition = `transform ${LAND_MS}ms ${LAND_EASE}`;
+      // 時間由距離反推，速度才會每次都一樣。見 LAND_SPEED 的說明
+      const duration = Math.round((final - Math.abs(at)) / LAND_SPEED);
+
+      el.style.transition = `transform ${duration}ms ${LAND_EASE}`;
       el.style.transform = `translateY(-${final}px)`;
 
-      settle = window.setTimeout(onLanded, LAND_MS);
+      settle = window.setTimeout(onLanded, duration);
     }, wait);
 
     return () => {
@@ -199,8 +216,8 @@ export function Reel({
   /*
     要備幾組才夠滑。
 
-    交棒時最多已經走掉一整組，再往前推三組、往上取整最多又是一組，
-    所以終點最遠不超過五組；加一組讓終點那格底下還有東西，不會滑到
+    交棒時最多已經走掉一整組，再往前推兩組、往上取整最多又是一組，
+    所以終點最遠不超過四組；多備一組讓終點那格底下還有東西，不會滑到
     空白。
   */
   const sets = Array.from({ length: LAND_MIN_LOOPS + 3 }, (_, i) => i);
