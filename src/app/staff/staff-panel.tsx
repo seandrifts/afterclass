@@ -26,6 +26,7 @@ import {
 } from '@/components/icons';
 import { ScanInput } from '@/components/qr-scanner';
 import { isBig, Reel } from '@/components/reel';
+import { SoundToggle } from '@/components/sound-toggle';
 import {
   playErrorSound,
   playRedeemSuccessSound,
@@ -74,14 +75,26 @@ export function StaffPanel({
   */
   const [tab, setTab] = useState<Tab>('draw');
 
+  /*
+    平板要寬一點。
+
+    這頁本來是照手機設計的，但主要使用場景已經變成店裡的 iPad ——
+    在 1180px 的橫式螢幕上，448px 的內容只佔中間一條，左右各留白
+    366px，而客人正盯著這個畫面看自己抽到什麼。
+  */
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-md px-4 py-5">
+    <main className="mx-auto min-h-dvh w-full max-w-md px-4 py-5 md:max-w-xl">
       <header className="mb-4 flex items-center justify-between">
         <div>
           <p className="text-sm text-ink-soft">店員</p>
           <h1 className="text-xl font-bold">{staffName}</h1>
         </div>
         <div className="flex items-center gap-3">
+          {/*
+            轉盤一次會響四十幾下。打烊後盤點、或客人在講電話時，
+            店員要有辦法當場關掉，不必去按 iPad 的實體音量鍵
+          */}
+          <SoundToggle />
           {isOwner ? (
             <a href="/admin" className="text-sm text-brand-600 underline">
               後台
