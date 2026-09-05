@@ -42,3 +42,6 @@ next-env.d.ts
 
 # 保留範本，實際值走 .env.local
 !.env.example
+
+# 資料備份含客人的 LINE ID 與暱稱，是個資，絕不進版控
+backups/
