@@ -33,12 +33,15 @@ let bus: AudioNode | null = null;
 /*
   限幅之後的補償增益。整體音量的總開關。
 
-  1.4 是實測出來的上限：大獎那段（五顆音疊在一起、底下還有轉軸的喀喀
-  聲）未經處理的峰值是 0.507，乘上 1.4 之後是 0.953，剛好貼著 1.0 的
-  天花板又沒有超過。1.5 會變成 1.02，就開始削波了。
+  1.4 是實測出來的上限：大獎那五顆音疊在一起未經處理的峰值是 0.507，
+  乘上 1.4 之後是 0.953，剛好貼著 1.0 的天花板又沒有超過。1.5 會變成
+  1.02，就開始削波了。
 
-  也就是說現在已經是「不破音的前提下能多大聲就多大聲」。真的還嫌小
+  也就是說整體已經是「不破音的前提下能多大聲就多大聲」。真的還嫌小
   的話，剩下的只能靠 iPad 本身的音量鍵或外接一顆小喇叭。
+
+  這個值不要單獨動。改它等於同時改動每一個音效，下面那條軟限幅曲線
+  的門檻也是照現在這組數字配的。
 */
 const MAKEUP = 1.4;
 
@@ -52,7 +55,17 @@ const MAKEUP = 1.4;
  * 中獎音必須明顯大過轉動聲，那才是重點所在。
  */
 const VOL = {
-  tick: 0.13, // 轉軸每經過一格的「喀」。會連響數十下，仍是全場最小的
+  /*
+    轉軸每經過一格的「喀」。
+
+    這是刻意調到很大聲的：實測輸出峰值 0.824，也就是滿格的八成，比
+    中獎音還響。轉盤的張力來自那串由密到疏的喀喀聲，店裡吵的時候
+    那才是最先被蓋掉的東西。
+
+    數字看起來跟其他項不成比例，是因為它經過限幅器與 makeup 之後
+    的實際輸出不是線性的。要改的話別用猜的，量過再改。
+  */
+  tick: 0.45,
   spin: 0.22, // 按下去的起始提示
   win: 0.38,
   winBig: 0.42,
@@ -123,7 +136,25 @@ export function unlockAudio() {
       const makeup = ctx.createGain();
       makeup.gain.setValueAtTime(MAKEUP, t);
 
-      limiter.connect(makeup).connect(ctx.destination);
+      /*
+        最後一道保險：軟限幅。
+
+        喀喀聲拉到八成之後，萬一它跟中獎音同時響（正常情況不會，轉軸
+        停了才播中獎音，但不該賭這個），兩者相加會衝到 1.2，那就是硬
+        削波，聽起來是「刺啦」。
+
+        壓縮器擋不住這種瞬間，它的起音是 3ms，喀聲整個只有 30ms。
+        這條曲線是即時的：0.90 以下原封不動通過，之上才平滑收到 0.98。
+        所以單獨的喀聲與中獎音完全不受影響，只有真的要溢出時才作用。
+
+        oversample 一定要維持 none。開 2x 或 4x 的話，重取樣濾波器
+        自己會過衝，實測反而會把峰值推回 1.01。
+      */
+      const shaper = ctx.createWaveShaper();
+      shaper.curve = softClipCurve(0.9, 0.98);
+      shaper.oversample = 'none';
+
+      limiter.connect(makeup).connect(shaper).connect(ctx.destination);
       bus = limiter;
     }
     if (ctx.state === 'suspended') void ctx.resume();
@@ -136,6 +167,35 @@ export function unlockAudio() {
 /** 聲音的出口。限幅器沒建起來時退回直接輸出，寧可小聲也不要沒聲音 */
 function out(audio: AudioContext): AudioNode {
   return bus ?? audio.destination;
+}
+
+/**
+ * 軟限幅曲線。
+ *
+ * threshold 以下是一條直線（輸入等於輸出），之上用 tanh 平滑地收斂到
+ * ceiling。ceiling 給 0.98 而不是 1.0，是留一點餘裕給浮點誤差。
+ *
+ * WaveShaper 會把超出 [-1, 1] 的輸入夾到曲線兩端，所以再大的訊號進來
+ * 也只會得到 ceiling，不會溢出。
+ */
+function softClipCurve(
+  threshold: number,
+  ceiling: number,
+): Float32Array<ArrayBuffer> {
+  const n = 8192;
+  // 明確給一般的 ArrayBuffer。WaveShaper.curve 不收 SharedArrayBuffer 支撐的陣列
+  const curve = new Float32Array(new ArrayBuffer(n * 4));
+  const span = ceiling - threshold;
+
+  for (let i = 0; i < n; i += 1) {
+    const x = (i / (n - 1)) * 2 - 1;
+    const a = Math.abs(x);
+    const y =
+      a <= threshold ? a : threshold + span * Math.tanh((a - threshold) / span);
+    curve[i] = Math.sign(x) * y;
+  }
+
+  return curve;
 }
 
 /** 單一顆音。用三角波，比正弦厚一點但不像方波那麼刺耳 */
