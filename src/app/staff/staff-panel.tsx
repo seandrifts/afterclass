@@ -29,9 +29,12 @@ import { ScanInput } from '@/components/qr-scanner';
 import { isBig, Reel } from '@/components/reel';
 import { SoundToggle } from '@/components/sound-toggle';
 import {
+  cancelSpeech,
   playErrorSound,
   playRedeemSuccessSound,
   playWinSound,
+  primeSpeech,
+  speakPrize,
   unlockAudio,
 } from '@/lib/sound';
 import type { Prize } from '@/lib/types';
@@ -187,8 +190,17 @@ function DrawTab({ prizes }: { prizes: Prize[] }) {
 
   const handleLanded = useCallback(() => {
     setSettled(true);
-    if (result) playWinSound(isBig(result.prize, prizes));
+    if (!result) return;
+
+    playWinSound(isBig(result.prize, prizes));
+
+    // 店員端一律唸獎項名稱（後台輸入的原文，含金額），不換算成點數。
+    // 店員要能立刻聽懂抽中什麼、該不該去拿實物
+    speakPrize(`恭喜，抽中${result.prize.name}`);
   }, [result, prizes]);
+
+  // 換下一位時如果還在唸上一位的獎，要先停掉
+  useEffect(() => cancelSpeech, []);
 
   // ---------------------------------------------------------------
   // 第三步：轉盤與結果
@@ -309,7 +321,11 @@ function DrawTab({ prizes }: { prizes: Prize[] }) {
           type="submit"
           size="lg"
           loading={drawing}
-          onClick={() => unlockAudio()}
+          onClick={() => {
+            // iPad Safari 只認使用者手勢當下解鎖的音訊與語音
+            unlockAudio();
+            primeSpeech();
+          }}
           className="min-h-24 text-2xl"
         >
           <IconSparkle className="size-7" />
@@ -512,7 +528,12 @@ function RedeemTab() {
           type="submit"
           size="lg"
           loading={looking}
-          onClick={unlockAudio}
+          onClick={() => {
+            // 提早在店員掃碼這一步就解鎖，語音清單有更多時間載入 ——
+            // 中文聲線沒載到的話會用英文聲線去唸中文，很難聽
+            unlockAudio();
+            primeSpeech();
+          }}
         >
           {looking ? '查詢中' : '查詢餘額'}
         </Button>

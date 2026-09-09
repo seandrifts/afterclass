@@ -1,32 +1,19 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import {
-  IconAlert,
-  IconLine,
-  IconSound,
-  IconSoundOff,
-  IconSparkle,
-} from '@/components/icons';
+import { IconAlert, IconLine, IconSparkle } from '@/components/icons';
 import { PrizeStrip } from './prize-strip';
 import { isBig, Reel } from '@/components/reel';
 import { SoundToggle } from '@/components/sound-toggle';
 import { Button, Card, Screen, Spinner } from '@/components/ui';
 import { formatForCustomer, progressToward } from '@/lib/points';
 import {
-  isSoundEnabled,
+  cancelSpeech,
   playSpinSound,
   playWinSound,
-  setSoundEnabled,
-  soundServerSnapshot,
-  subscribeSound,
+  primeSpeech,
+  speakPrize,
   unlockAudio,
 } from '@/lib/sound';
 import type { Prize, PrizeSnapshot, Settings } from '@/lib/types';
@@ -64,8 +51,10 @@ export function DrawFlow({
     setPhase('spinning');
     setMessage(null);
 
-    // 必須在使用者手勢的當下解鎖音訊，實際發聲是三秒後轉盤停下來時
+    // 必須在使用者手勢的當下解鎖音訊與語音，實際發聲是一秒後轉盤停下來時。
+    // primeSpeech 順便開始載入中文聲線，等到要唸時才不會來不及
     unlockAudio();
+    primeSpeech();
     playSpinSound();
 
     // 觸覺回饋。手機轉靜音時聽不到聲音，震動仍然有感
@@ -106,8 +95,16 @@ export function DrawFlow({
     if (prize) {
       playWinSound(isBig(prize, prizes));
       navigator.vibrate?.([40, 60, 120]);
+
+      // 唸的內容跟卡片上的字一致。點數顯示開著時卡片寫「+500 點」，
+      // 這裡就不能唸成「50 元」，不然客人會以為系統算錯
+      speakPrize(`恭喜，抽中${prizeSpeech(prize, settings)}`);
     }
-  }, [prize, prizes]);
+  }, [prize, prizes, settings]);
+
+  // 離開頁面時把還沒唸完的停掉。SpeechSynthesis 是瀏覽器層級的，
+  // 不停的話換頁之後還會繼續講
+  useEffect(() => cancelSpeech, []);
 
   const claim = useCallback(async () => {
     setPhase('claiming');
@@ -409,6 +406,17 @@ function CountUp({
       <span className="text-lg">{suffix}</span>
     </span>
   );
+}
+
+/**
+ * 語音要唸的獎項內容。
+ *
+ * 跟 Outcome 卡片上的字走同一套規則 —— 儲值金唸金額（或點數），
+ * 實物與免單唸獎項名稱。看到的跟聽到的必須是同一件事。
+ */
+function prizeSpeech(prize: PrizeSnapshot, settings: Settings): string {
+  if (prize.type !== 'credit') return prize.name;
+  return formatForCustomer(prize.credit_amount ?? 0, settings);
 }
 
 function describeDrawError(error: string, reason?: string): string {

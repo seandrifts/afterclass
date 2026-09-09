@@ -14,25 +14,35 @@ import type { Prize, PrizeSnapshot } from '@/lib/types';
   落點只能先給預設值 0，而排序第一的正好是最大獎，客人就會看到轉軸
   慢慢停在「免單」上，等結果回來才硬跳成真正抽中的獎。中了又被抽走
   是最傷的觀感，寧可多轉半秒也不能發生。
+
+  整段從按下到停穩約 0.7–1.2 秒（原本 1.6–2.2 秒，更早之前是 3.1 秒）。
+  尖峰時段客人排在後面等結帳，抽獎不該變成隊伍卡住的原因。
 */
 const ITEM_H = 132;
-const SPIN_MIN_MS = 350; // 最短空轉。網路太快時也要有「真的在轉」的感覺
-const SPIN_SET_MS = 520; // 空轉繞完一圈的時間，決定等速階段的速度
-const LAND_MIN_LOOPS = 2; // 減速期間至少再繞幾圈，才有慣性
+const SPIN_MIN_MS = 220; // 最短空轉。網路太快時也要有「真的在轉」的感覺
+const SPIN_SET_MS = 380; // 空轉繞完一圈的時間，決定等速階段的速度
+const LAND_MIN_LOOPS = 1; // 減速期間至少再繞幾圈，才有慣性
 
 /*
-  減速的平均速度（px/ms），時間由距離反推。
+  減速速度不寫死，由空轉速度反推。
 
-  原本是固定 2200ms。但滑行距離會隨著「交棒時剛好轉到哪」與「抽中第幾
-  個獎項」差到一整圈（1056px），固定時間就代表速度忽快忽慢 —— 同一台
-  機器有時滑順有時暴衝，而且暴衝那次會在交棒瞬間明顯頓一下。
+  滑行距離會隨著「交棒時剛好轉到哪」與「抽中第幾個獎項」差到一整圈，
+  所以時間是距離除以速度算出來的 —— 固定時間的話速度會忽快忽慢，同一
+  台機器有時滑順有時暴衝。
 
-  改成距離除以這個速度得到時間，每一次的手感就都一樣。搭配下面的曲線，
-  峰值是平均的 1.23 倍，剛好等於空轉速度，交棒接得上。
+  速度要多少，取決於下面那條曲線的峰值：整段的最高速度不能超過空轉
+  速度，否則交棒瞬間會突然衝一下。曲線峰值是平均的 1.23 倍，所以平均
+  速度取「空轉速度 ÷ 1.23」，峰值就剛好接上空轉。
 
-  整段從按下到停穩約 1.6–2.2 秒，比原本的 3.1 秒短了三分之一以上。
+  以前這裡寫死 1.65，那是照八個獎項算出來的。老闆在後台停用或新增
+  獎項之後圈長就變了，空轉速度跟著變，寫死的值就對不上、交棒會頓。
+  改成當場算就不會有這個問題。
 */
-const LAND_SPEED = 1.65;
+const LAND_PEAK_RATIO = 1.23;
+
+function landSpeed(count: number): number {
+  return (count * ITEM_H) / SPIN_SET_MS / LAND_PEAK_RATIO;
+}
 
 /*
   減速曲線。
@@ -42,9 +52,9 @@ const LAND_SPEED = 1.65;
   是平均的 5.25 倍，換算成畫面就是空轉 34px/幀、一交棒變成 142px/幀，
   很明顯的頓挫。
 
-  這條的峰值是平均的 1.23 倍。搭配 LAND_SPEED 之後換算成畫面，峰值
-  剛好落在空轉的 34px/幀 附近，交棒看不出接縫；九成九的距離在 93% 的
-  時間就走完，不會有停不下來的拖尾。
+  這條的峰值是平均的 1.23 倍，就是上面 LAND_PEAK_RATIO 的來源。兩者
+  是綁在一起的：換曲線就要重算那個比值，否則交棒會看得出接縫。
+  另外九成九的距離在 93% 的時間就走完，不會有停不下來的拖尾。
 */
 const LAND_EASE = 'cubic-bezier(0.5, 0.55, 0.75, 1)';
 
@@ -122,7 +132,7 @@ export function Reel({
     那個由密到疏的過程就是轉盤的張力所在，用固定節拍或一段錄好的音檔
     都做不出來，而且動畫時間一改就對不上。
 
-    高速時大約每秒十五下，跟實體拉霸機差不多。
+    高速時大約每秒二十下，跟實體拉霸機差不多。
   */
   useEffect(() => {
     if (!spinning || instant) return;
@@ -183,8 +193,10 @@ export function Reel({
       const loops = Math.ceil((least - landIndex * ITEM_H) / set);
       const final = loops * set + landIndex * ITEM_H;
 
-      // 時間由距離反推，速度才會每次都一樣。見 LAND_SPEED 的說明
-      const duration = Math.round((final - Math.abs(at)) / LAND_SPEED);
+      // 時間由距離反推，速度才會每次都一樣。見 LAND_PEAK_RATIO 的說明
+      const duration = Math.round(
+        (final - Math.abs(at)) / landSpeed(prizes.length),
+      );
 
       el.style.transition = `transform ${duration}ms ${LAND_EASE}`;
       el.style.transform = `translateY(-${final}px)`;
