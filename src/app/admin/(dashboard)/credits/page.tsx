@@ -1,7 +1,7 @@
 import { CreditBoard } from './credit-board';
 import { db } from '@/lib/supabase';
 import { getSettings } from '@/lib/settings';
-import { shopMonthStart } from '@/lib/time';
+import { loadCreditTotals } from '@/lib/stats';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,24 +63,15 @@ export default async function CreditsPage(
 
   const { data: ledger } = await ledgerQuery.limit(query ? 300 : 100);
 
-  const warnCutoff = new Date();
-  warnCutoff.setDate(warnCutoff.getDate() + settings.expire_warn_days);
+  /*
+    加總走 report_totals()，跟後台首頁同一個函式。
 
-  // 月初也要用店家時區，否則月初與月底那幾小時會歸錯月份
-  const monthStart = shopMonthStart();
-
-  const [soon, all, expiredThisMonth, integrity, prizeRows] = await Promise.all([
-    db()
-      .from('users')
-      .select('balance')
-      .gt('balance', 0)
-      .lt('balance_expires_at', warnCutoff.toISOString()),
-    db().from('users').select('balance').gt('balance', 0),
-    db()
-      .from('balance_transactions')
-      .select('amount')
-      .eq('type', 'expire')
-      .gte('created_at', monthStart),
+    原本這裡是把所有餘額大於零的使用者、以及本月每一筆到期紀錄整批
+    拉回來用 JS 加總。PostgREST 單次回傳有筆數上限，超過會靜靜截斷，
+    加總出來的「流通中點數」會偏小而且看不出異常。詳見 0008 migration。
+  */
+  const [totals, integrity, prizeRows] = await Promise.all([
+    loadCreditTotals(settings.expire_warn_days),
     db().rpc('check_balance_integrity'),
     // 送獎項的下拉選單。只列還在啟用的，停用的獎項不該再送出去
     db()
@@ -90,9 +81,6 @@ export default async function CreditsPage(
       .order('sort_order'),
   ]);
 
-  const sum = (rows: { balance: number }[] | null) =>
-    (rows ?? []).reduce((a, r) => a + r.balance, 0);
-
   return (
     <CreditBoard
       ledger={(ledger ?? []) as unknown as LedgerRow[]}
@@ -100,15 +88,14 @@ export default async function CreditsPage(
       matchedUsers={matchedUsers}
       warnDays={settings.expire_warn_days}
       prizes={prizeRows.data ?? []}
+      /* null 代表 0008 migration 還沒跑。畫面要講清楚，不能顯示 0 */
+      totalsMissing={totals === null}
       summary={{
-        outstanding: sum(all.data),
-        outstandingPeople: all.data?.length ?? 0,
-        expiringSoon: sum(soon.data),
-        expiringSoonPeople: soon.data?.length ?? 0,
-        expiredThisMonth: (expiredThisMonth.data ?? []).reduce(
-          (a, r) => a + Math.abs(r.amount),
-          0,
-        ),
+        outstanding: totals?.outstanding ?? 0,
+        outstandingPeople: totals?.outstanding_people ?? 0,
+        expiringSoon: totals?.expiring_amount ?? 0,
+        expiringSoonPeople: totals?.expiring_people ?? 0,
+        expiredThisMonth: totals?.month_expire_total ?? 0,
         integrityBreaches: Array.isArray(integrity.data)
           ? integrity.data.length
           : 0,

@@ -15,7 +15,24 @@ import { db } from '@/lib/supabase';
  * 重複執行是安全的：到期函式的 WHERE 只挑到期資料，跑第二次是 0 列；
  * 推播有 dedup_key 的唯一約束擋著。
  */
+
+/*
+  Vercel 的函式有執行時間上限，不指定就用預設值。60 秒是 Hobby 與 Pro
+  兩種方案都吃得下的最大值，所以寫死在這裡不會因為方案而部署失敗。
+*/
+export const maxDuration = 60;
+
+/*
+  整條路由要在幾秒內收工。
+
+  推播是唯一會隨著會員數成長的部分（每人一次 LINE API 加一次資料庫
+  寫入），所以時間預算給它。留 10 秒的餘裕給後面的心跳更新，讓它在
+  被砍掉之前一定寫得完。
+*/
+const DEADLINE_MS = (maxDuration - 10) * 1000;
+
 export async function GET(request: Request) {
+  const startedAt = Date.now();
   const auth = request.headers.get('authorization');
   if (auth !== `Bearer ${env.cronSecret()}`) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
@@ -28,23 +45,28 @@ export async function GET(request: Request) {
     db().rpc('expire_tokens'),
   ]);
 
-  const settings = await getSettings();
-  const push = await sendExpiryWarnings(settings);
-
-  const integrity = await db().rpc('check_balance_integrity');
+  const [settings, integrity] = await Promise.all([
+    getSettings(),
+    db().rpc('check_balance_integrity'),
+  ]);
   const breaches = Array.isArray(integrity.data) ? integrity.data.length : 0;
 
   /*
-    每次執行都留一筆心跳。
+    心跳要在推播之前寫。
 
-    原本只有「真的有東西到期」才寫紀錄，平常跑完不留痕跡，所以無法
-    分辨「排程正常但沒事可做」與「排程根本沒跑」。後者會讓點數永遠
-    不到期、到期提醒永遠不發，而且要等好幾個月才會被發現。
+    原本這筆紀錄寫在整條路由的最後。推播是逐人跑的，會員一多就會超過
+    函式的執行時間上限被砍掉，於是這筆永遠寫不進去，後果是：
 
-    這筆紀錄同時也是 Supabase 免費方案的保命符：每天一次資料庫寫入
-    就足以讓專案不被判定為閒置而暫停。
+      1. 後台會顯示「每日排程已經 N 天沒有執行」，但其實到期處理都跑完了
+      2. Supabase 免費方案靠這筆寫入判定專案沒有閒置，少了它專案會被暫停
+
+    到期處理在這一行之前就已經完成，所以先寫是誠實的。推播結果等一下
+    再補上去。
+
+    這筆紀錄的另一個用途是分辨「排程正常但沒事可做」與「排程根本沒跑」。
+    後者會讓點數永遠不到期而且要好幾個月才發現得了。
   */
-  await db()
+  const { data: log } = await db()
     .from('audit_logs')
     .insert({
       actor_type: 'system',
@@ -54,14 +76,36 @@ export async function GET(request: Request) {
         到期餘額: balances.data ?? 0,
         到期券: coupons.data ?? 0,
         失效序號: tokens.data ?? 0,
-        推播: push,
         帳務異常: breaches,
+        推播: '進行中',
       },
     })
-    .then(
-      () => undefined,
-      () => undefined,
-    );
+    .select('id')
+    .single();
+
+  // 前面的到期處理已經花掉一些時間，預算要扣掉，不能從這一刻重新算
+  const push = await sendExpiryWarnings(settings, {
+    budgetMs: Math.max(0, DEADLINE_MS - (Date.now() - startedAt)),
+  });
+
+  if (log) {
+    await db()
+      .from('audit_logs')
+      .update({
+        detail: {
+          到期餘額: balances.data ?? 0,
+          到期券: coupons.data ?? 0,
+          失效序號: tokens.data ?? 0,
+          帳務異常: breaches,
+          推播: push,
+        },
+      })
+      .eq('id', log.id)
+      .then(
+        () => undefined,
+        () => undefined,
+      );
+  }
 
   return NextResponse.json({
     expiredBalances: balances.data ?? 0,

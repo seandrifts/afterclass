@@ -19,13 +19,40 @@ export type DrawOutcome =
   | { ok: true; prize: PrizeSnapshot }
   | { ok: false; error: string; reason?: string; status: number };
 
+/*
+  保底要往回看幾筆。
+
+  這個數字必須「一次抓好抓滿」，因為要跟設定、獎項、序號狀態同時發出去
+  才省得到往返時間，而那時候還讀不到 settings.pity_threshold（它就在
+  同一批裡）。抓固定的 50 筆回來之後再照實際門檻去裁。
+
+  門檻設得比 50 大的話（預設 20）就退回去補一次查詢，那是罕見情況，
+  慢一點沒關係，但不能算錯。
+*/
+const PITY_LOOKBACK = 50;
+
 export async function runDraw(opts: {
   code: string;
   ipHash: string;
   /** 已知是誰在抽時傳入，保底才算得準 */
   userId?: string | null;
 }): Promise<DrawOutcome> {
-  const settings = await getSettings();
+  /*
+    這四件事彼此不相依，一起發出去。
+
+    原本是一個等一個：設定、序號狀態、獎項清單、保底紀錄，四趟往返
+    排成一列。抽獎是客人站在櫃檯前盯著看的動作，這裡每一趟的延遲都
+    直接變成他等待的時間。
+
+    代價是活動關閉或序號無效時會多查幾筆用不到的資料。那是失敗路徑，
+    不值得為它拖慢每一次正常的抽獎。
+  */
+  const [settings, state, prizeRes, pityRows] = await Promise.all([
+    getSettings(),
+    readToken(opts.code),
+    db().from('prizes').select('*').eq('is_active', true).order('sort_order'),
+    opts.userId ? recentSnapshots(opts.userId, PITY_LOOKBACK) : null,
+  ]);
 
   const campaign = isCampaignOpen(settings);
   if (!campaign.open) {
@@ -37,18 +64,11 @@ export async function runDraw(opts: {
     };
   }
 
-  const state = await readToken(opts.code);
   if (state.kind !== 'ready') {
     return { ok: false, error: 'TOKEN_NOT_AVAILABLE', reason: state.kind, status: 409 };
   }
 
-  const { data: prizeRows } = await db()
-    .from('prizes')
-    .select('*')
-    .eq('is_active', true)
-    .order('sort_order');
-
-  let prizes = (prizeRows ?? []) as Prize[];
+  let prizes = (prizeRes.data ?? []) as Prize[];
   if (prizes.length === 0) {
     return { ok: false, error: 'NO_PRIZES', status: 503 };
   }
@@ -57,11 +77,18 @@ export async function runDraw(opts: {
     保底：連續抽到最低級距太多次就把它排除掉。
 
     熟客一週來三次，連續二十次都抽到 1 元會覺得被耍。店員代抽時
-    一定知道客人是誰，所以這條在 iPad 那邊反而比客人自己抽更準 ——
+    一定知道客人是誰，所以這條在 iPad 那邊反而比客人自己抽更準：
     客人自己抽時如果還沒登入，根本追蹤不到連續次數。
   */
   if (settings.pity_enabled && opts.userId) {
-    if (await hasHitPity(opts.userId, prizes, settings.pity_threshold)) {
+    const threshold = settings.pity_threshold;
+
+    const history =
+      threshold <= PITY_LOOKBACK
+        ? (pityRows ?? [])
+        : await recentSnapshots(opts.userId, threshold);
+
+    if (hasHitPity(history, prizes, threshold)) {
       prizes = excludeLowestTier(prizes);
     }
   }
@@ -90,32 +117,45 @@ export async function runDraw(opts: {
   return { ok: true, prize: snapshot };
 }
 
-/**
- * 這個帳號是不是連續 N 次都抽到最低價值的獎項。
- */
-async function hasHitPity(
+interface SnapshotRow {
+  prize_snapshot: { face_value: number } | null;
+}
+
+/** 這個帳號最近 N 次的中獎內容，新的在前 */
+async function recentSnapshots(
   userId: string,
-  prizes: Prize[],
-  threshold: number,
-): Promise<boolean> {
-  const active = prizes.filter((p) => p.weight > 0);
-  if (active.length === 0) return false;
-
-  const lowest = Math.min(...active.map((p) => p.face_value));
-
+  limit: number,
+): Promise<SnapshotRow[]> {
   const { data } = await db()
     .from('draw_tokens')
     .select('prize_snapshot')
     .eq('claimed_by', userId)
     .not('prize_snapshot', 'is', null)
     .order('drawn_at', { ascending: false })
-    .limit(threshold);
+    .limit(limit);
 
-  if (!data || data.length < threshold) return false;
+  return (data ?? []) as SnapshotRow[];
+}
 
-  return data.every(
-    (row) =>
-      (row.prize_snapshot as { face_value: number } | null)?.face_value ===
-      lowest,
-  );
+/**
+ * 這個帳號是不是連續 N 次都抽到最低價值的獎項。
+ *
+ * 只做判斷不查資料庫，查詢在上面跟其他東西一起發出去了。
+ */
+function hasHitPity(
+  history: SnapshotRow[],
+  prizes: Prize[],
+  threshold: number,
+): boolean {
+  const active = prizes.filter((p) => p.weight > 0);
+  if (active.length === 0) return false;
+
+  // 抽獎次數還不夠多，談不上連續
+  if (history.length < threshold) return false;
+
+  const lowest = Math.min(...active.map((p) => p.face_value));
+
+  return history
+    .slice(0, threshold)
+    .every((row) => row.prize_snapshot?.face_value === lowest);
 }

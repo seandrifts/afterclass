@@ -231,7 +231,18 @@ function Alerts({
 }) {
   const alerts: { level: 'bad' | 'warn'; text: string }[] = [];
 
-  // 最高優先。代表有人繞過 ledger 動了餘額，那筆錢查不出去向
+  /*
+    比帳務異常還優先。數字全部是 0 的時候，老闆第一眼會以為今天沒生意，
+    而不會想到是資料庫函式沒裝。這種誤讀比看不到數字更危險。
+  */
+  if (stats.totalsMissing) {
+    alerts.push({
+      level: 'bad',
+      text: '報表函式尚未安裝，下面所有數字都是 0，不代表實際營運狀況。請在 Supabase SQL 編輯器執行 supabase/migrations/0008_report_totals.sql。',
+    });
+  }
+
+  // 代表有人繞過 ledger 動了餘額，那筆錢查不出去向
   if (stats.integrityBreaches > 0) {
     alerts.push({
       level: 'bad',
@@ -273,7 +284,8 @@ function Alerts({
     });
   }
 
-  if (stats.activeTokensLeft < 50) {
+  // 函式沒裝時這個數字是 0，會誤報「序號快用完了」
+  if (!stats.totalsMissing && stats.activeTokensLeft < 50) {
     alerts.push({
       level: 'warn',
       text: `可用序號只剩 ${stats.activeTokensLeft} 組，該啟用下一批了。`,

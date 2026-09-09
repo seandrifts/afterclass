@@ -20,6 +20,7 @@ export function CreditBoard({
   matchedUsers,
   warnDays,
   summary,
+  totalsMissing,
   prizes,
 }: {
   ledger: LedgerRow[];
@@ -40,6 +41,8 @@ export function CreditBoard({
     expiredThisMonth: number;
     integrityBreaches: number;
   };
+  /** report_totals() 還沒安裝。上面那些數字會全部是 0，要講清楚 */
+  totalsMissing: boolean;
 }) {
   const [adjusting, setAdjusting] = useState(false);
   const [granting, setGranting] = useState(false);
@@ -74,6 +77,14 @@ export function CreditBoard({
           </Button>
         </div>
       </div>
+
+      {totalsMissing ? (
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-bad">
+          報表函式尚未安裝，下面的流通中點數與到期金額都是 0，不代表實際
+          狀況。請在 Supabase SQL 編輯器執行
+          supabase/migrations/0008_report_totals.sql。
+        </p>
+      ) : null}
 
       {summary.integrityBreaches > 0 ? (
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-bad">

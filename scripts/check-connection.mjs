@@ -211,6 +211,21 @@ const MIGRATIONS = [
     what: '登入鎖定階梯',
     probe: () => db.from('staff').select('lockout_level').limit(1),
   },
+  {
+    file: '0007_staff_grant.sql',
+    what: '店員送獎項',
+    probe: () => db.from('settings').select('staff_grant_max_value').eq('id', 1),
+  },
+  {
+    file: '0008_report_totals.sql',
+    what: '報表加總',
+    probe: () =>
+      db.rpc('report_totals', {
+        p_day_start: new Date().toISOString(),
+        p_month_start: new Date().toISOString(),
+        p_warn_cutoff: new Date().toISOString(),
+      }),
+  },
 ];
 
 for (const m of MIGRATIONS) {
@@ -224,32 +239,45 @@ for (const m of MIGRATIONS) {
 
 console.log('\n[8] 卡片');
 
-const tokens = await db.from('draw_tokens').select('status, kind, expires_at');
+/*
+  用 count 查詢，不要把卡片整批拉回來自己數。
+
+  PostgREST 單次回傳有筆數上限（預設 1000），超過會靜靜截斷。印了
+  三批卡片之後，「客人抽得到幾張」就會開始少報，而這個腳本存在的
+  意義正是回答那個問題。
+
+  紙卡印出來時是 inactive，店員收錢後才刷成 active。所以「印了幾張」
+  跟「客人現在抽得到幾張」是兩件事，這裡分開算。
+
+  active 但已過保存期限的不算數：它們在資料庫裡看起來還是 active，
+  但客人掃了會被拒絕，只看狀態欄會誤判。
+*/
+const nowIso = new Date().toISOString();
+
+const [total, liveRes, spareRes] = await Promise.all([
+  db.from('draw_tokens').select('id', { count: 'exact', head: true }),
+  db
+    .from('draw_tokens')
+    .select('id', { count: 'exact', head: true })
+    .eq('kind', 'card')
+    .eq('status', 'active')
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+  db
+    .from('draw_tokens')
+    .select('id', { count: 'exact', head: true })
+    .eq('kind', 'card')
+    .eq('status', 'inactive'),
+]);
+
+const tokens = { error: total.error ?? liveRes.error ?? spareRes.error };
 
 if (tokens.error) {
   bad(`讀不到卡片：${tokens.error.message}`);
 } else {
-  const now = Date.now();
+  const live = liveRes.count ?? 0;
+  const spare = spareRes.count ?? 0;
 
-  /*
-    紙卡印出來時是 inactive，店員收錢後才刷成 active。所以「印了幾張」
-    跟「客人現在抽得到幾張」是兩件事，這裡分開算。
-
-    active 但已過保存期限的要另外挑出來 —— 它們在資料庫裡看起來還是
-    active，但客人掃了會被拒絕，只看狀態欄會誤判。
-    */
-  const live = tokens.data.filter(
-    (t) =>
-      t.kind === 'card' &&
-      t.status === 'active' &&
-      (!t.expires_at || Date.parse(t.expires_at) > now),
-  ).length;
-
-  const spare = tokens.data.filter(
-    (t) => t.kind === 'card' && t.status === 'inactive',
-  ).length;
-
-  if (tokens.data.length === 0) {
+  if ((total.count ?? 0) === 0) {
     bad(
       '一張卡片都還沒產生',
       '後台「序號卡」建立一批並列印，否則客人掃不到任何東西',

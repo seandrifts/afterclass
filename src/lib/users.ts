@@ -46,6 +46,18 @@ export async function upsertLineUser(profile: {
       .update({
         display_name: profile.displayName ?? null,
         avatar_url: profile.pictureUrl ?? null,
+        /*
+          順手清掉「推不到」的標記。
+
+          這個標記在推播收到 403（客人封鎖或沒加好友）時設上，設上之後
+          就不再挑他當推播對象。但在此之前沒有任何地方會把它清掉，等於
+          客人只要封鎖過一次，之後就算加回來也永遠收不到到期提醒。
+
+          用 LINE 登入代表帳號還在、人還會回店裡，值得再試一次。如果他
+          其實還是沒加官方帳號，下一次推播會再收到 403 重新標記回去，
+          自己會收斂。失敗的推播不計入 LINE 的每月額度。
+        */
+        line_unreachable_at: null,
       })
       .eq('id', (existing.data as User).id)
       .select('*')
