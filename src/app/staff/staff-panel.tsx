@@ -33,6 +33,7 @@ import {
   playErrorSound,
   playRedeemSuccessSound,
   playWinSound,
+  preferMediaPlayback,
   primeSpeech,
   speakPrize,
   unlockAudio,
@@ -86,6 +87,11 @@ export function StaffPanel({
     按的放在第一個，尖峰時段少一次點擊。
   */
   const [tab, setTab] = useState<Tab>('draw');
+
+  // 店裡的 iPad 被按了靜音也要聽得到抽獎音效，見 preferMediaPlayback
+  useEffect(() => {
+    preferMediaPlayback();
+  }, []);
 
   /*
     平板要寬一點。

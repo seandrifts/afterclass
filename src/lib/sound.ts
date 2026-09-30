@@ -67,13 +67,30 @@ const VOL = {
   */
   tick: 0.45,
   spin: 0.22, // 按下去的起始提示
-  win: 0.38,
-  winBig: 0.42,
-  winTail: 0.3, // 大獎最後那顆長音
+  /*
+    中獎音。數字比以前小（原本 0.38 / 0.42 / 0.3），實際卻更大聲。
+
+    原本每顆音一敲下去就開始衰減，只有開頭一瞬間是響的，整段的平均
+    能量很低，而耳朵判斷大小聲看的是平均。現在每顆音會先撐住 WIN_HOLD
+    的時間再收尾（見 tone 的 hold），聲音變「厚」了，音量就得往回收，
+    不然琶音疊在一起會一直頂到後面的軟限幅。
+
+    離線渲染實測（同一條限幅鏈）：
+      一般獎  平均 -17.1 → -11.5 dB，軟限幅作用時間 0.22%
+      大獎    平均 -15.4 → -11.4 dB，軟限幅作用時間 0.67%
+    作用時間指的是超過 0.9、被 tanh 輕微收掉的取樣比例，這個量聽不出來。
+    再往上加，比例會很快爬到 1% 以上。
+  */
+  win: 0.228,
+  winBig: 0.21,
+  winTail: 0.15, // 大獎最後那顆長音
   scan: 0.16,
   redeem: 0.26,
   error: 0.24,
 } as const;
+
+/** 中獎音每顆音撐在最大音量的時間，佔整顆音長度的比例 */
+const WIN_HOLD = 0.7;
 
 const STORAGE_KEY = 'ld_sound';
 
@@ -164,6 +181,33 @@ export function unlockAudio() {
   }
 }
 
+/**
+ * 讓網頁音效照「媒體播放」處理，iPad 開著靜音也會出聲。
+ *
+ * iOS 預設把網頁的 Web Audio 當成環境音，靜音一開就完全沒聲音。店裡
+ * 那台 iPad 被誰順手按了靜音，抽獎就變成默劇，而且沒人會想到是這個。
+ *
+ * 只給店員端用。客人自己的手機開靜音就是不想出聲，不該被網頁蓋過去。
+ *
+ * 代價：playback 會讓同一台 iPad 上正在播的音樂暫停。店裡如果用這台
+ * 放音樂，要改用別的裝置。
+ *
+ * Safari 17 起才有 audioSession，更舊的版本或其他瀏覽器直接略過。
+ * transient 類型在 iOS 18 會播放但沒聲音（WebKit bug 264473），不要用。
+ */
+export function preferMediaPlayback() {
+  if (typeof navigator === 'undefined') return;
+  const session = (
+    navigator as Navigator & { audioSession?: { type: string } }
+  ).audioSession;
+  if (!session) return;
+  try {
+    session.type = 'playback';
+  } catch {
+    // 設不成就維持系統預設，頂多靜音時沒聲音
+  }
+}
+
 /** 聲音的出口。限幅器沒建起來時退回直接輸出，寧可小聲也不要沒聲音 */
 function out(audio: AudioContext): AudioNode {
   return bus ?? audio.destination;
@@ -198,13 +242,18 @@ function softClipCurve(
   return curve;
 }
 
-/** 單一顆音。用三角波，比正弦厚一點但不像方波那麼刺耳 */
+/**
+ * 單一顆音。用三角波，比正弦厚一點但不像方波那麼刺耳。
+ *
+ * hold 是撐在最大音量的時間佔整顆音的比例，0 就是敲下去立刻衰減。
+ */
 function tone(
   audio: AudioContext,
   freq: number,
   startAt: number,
   duration: number,
   gain: number,
+  hold = 0,
 ) {
   const osc = audio.createOscillator();
   const vol = audio.createGain();
@@ -215,6 +264,7 @@ function tone(
   // 起音快、收尾平滑。直接開關會有「喀」的爆音
   vol.gain.setValueAtTime(0, startAt);
   vol.gain.linearRampToValueAtTime(gain, startAt + 0.015);
+  if (hold > 0) vol.gain.setValueAtTime(gain, startAt + duration * hold);
   vol.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
 
   osc.connect(vol).connect(out(audio));
@@ -249,12 +299,20 @@ export function playWinSound(big = false) {
       now + i * 0.085,
       big ? 0.5 : 0.34,
       big ? VOL.winBig : VOL.win,
+      WIN_HOLD,
     );
   });
 
   // 大獎在最後補一顆長音收尾，像小小的號角
   if (big) {
-    tone(ctx, 1046.5, now + notes.length * 0.085 + 0.05, 0.9, VOL.winTail);
+    tone(
+      ctx,
+      1046.5,
+      now + notes.length * 0.085 + 0.05,
+      0.9,
+      VOL.winTail,
+      WIN_HOLD,
+    );
   }
 }
 
