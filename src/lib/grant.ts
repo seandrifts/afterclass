@@ -118,6 +118,7 @@ export async function grantPrize(opts: {
       p_code: code,
       p_prize_id: prize.id,
       p_snapshot: toSnapshot(prize),
+      // 一定要傳 null。保底與「剛剛抽過」的判斷靠它分辨送獎與抽獎
       p_ip_hash: null,
     })
     .single<{ ok: boolean; reason: string | null }>();
@@ -144,6 +145,8 @@ export async function grantPrize(opts: {
       credit_added: number | null;
       new_balance: number | null;
       coupon_id: string | null;
+      /** 0009 之後才有。撞號時資料庫會換碼，以這個為準 */
+      redeem_code?: string | null;
     }>();
 
   if (claimError || !claim?.ok) {
@@ -173,6 +176,6 @@ export async function grantPrize(opts: {
     message: claim.credit_added
       ? `已送出「${prize.name}」，${user.display_name ?? '會員'} 目前 ${claim.new_balance} 元`
       : `已送出「${prize.name}」給 ${user.display_name ?? '會員'}`,
-    redeemCode: claim.coupon_id ? redeemCode : null,
+    redeemCode: claim.coupon_id ? (claim.redeem_code ?? redeemCode) : null,
   };
 }

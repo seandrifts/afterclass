@@ -22,7 +22,11 @@ const bodySchema = z.object({ code: z.string().min(1).max(32) });
 export async function POST(request: Request) {
   const ip = await clientIpHash();
 
-  const limit = hit(`draw:${ip}`, 5, 60_000);
+  /*
+    店內 WiFi 的客人共用同一個對外 IP，5 次會讓同桌的人互卡。
+    20 次對猜序號仍然毫無幫助：紙卡 8 碼、25 字元，空間約 1.5e11。
+  */
+  const limit = hit(`draw:${ip}`, 20, 60_000);
   if (!limit.ok) {
     return NextResponse.json(
       { error: 'RATE_LIMITED', retryAfter: limit.retryAfterSec },

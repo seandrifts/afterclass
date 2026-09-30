@@ -53,6 +53,11 @@ interface LookedUpUser {
     minutesAgo: number;
     staffName: string | null;
   } | null;
+  recentDraw: {
+    prizeName: string | null;
+    minutesAgo: number;
+    staffName: string | null;
+  } | null;
 }
 
 export function StaffPanel({
@@ -180,6 +185,7 @@ function DrawTab({ prizes }: { prizes: Prize[] }) {
   const error = drawError ?? lookupError;
 
   const [settled, setSettled] = useState(false);
+  const [drawAcknowledged, setDrawAcknowledged] = useState(false);
 
   const announced = useRef<string | null>(null);
   useEffect(() => {
@@ -302,9 +308,60 @@ function DrawTab({ prizes }: { prizes: Prize[] }) {
           </p>
         </Card>
 
-        <p className="text-center text-lg font-bold text-brand-600">
-          請把螢幕轉給客人
-        </p>
+        {/*
+          剛抽過就擋一下，跟折抵同一套做法。iPad 代抽沒有跟消費綁在一起，
+          同一位客人重掃一次就能再抽，不管是手滑還是有意，都要店員自己
+          按一次確認才放行
+        */}
+        {member.recentDraw && !drawAcknowledged ? (
+          <div
+            role="alert"
+            className="rounded-card border-2 border-warn bg-amber-50 p-4 text-center"
+          >
+            <IconAlert className="mx-auto size-8 text-warn" />
+            <p className="mt-2 text-lg font-black text-warn">
+              這位客人剛抽過
+            </p>
+            <p className="mt-1 text-sm text-pretty text-ink-soft">
+              {member.recentDraw.minutesAgo === 0
+                ? '不到 1 分鐘前'
+                : `${member.recentDraw.minutesAgo} 分鐘前`}
+              抽過
+              {member.recentDraw.prizeName ? (
+                <>
+                  ，抽中{' '}
+                  <strong className="text-ink">
+                    {member.recentDraw.prizeName}
+                  </strong>
+                </>
+              ) : null}
+              {member.recentDraw.staffName
+                ? `（${member.recentDraw.staffName}）`
+                : ''}
+              。確認這次有另外消費再繼續。
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="min-h-14 cursor-pointer rounded-xl border-2 border-line bg-raised font-bold transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => setDrawAcknowledged(true)}
+                className="min-h-14 cursor-pointer rounded-xl bg-warn font-bold text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-300"
+              >
+                確認要再抽
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-center text-lg font-bold text-brand-600">
+            請把螢幕轉給客人
+          </p>
+        )}
 
         {error ? (
           <p
@@ -321,6 +378,7 @@ function DrawTab({ prizes }: { prizes: Prize[] }) {
           type="submit"
           size="lg"
           loading={drawing}
+          disabled={!!member.recentDraw && !drawAcknowledged}
           onClick={() => {
             // iPad Safari 只認使用者手勢當下解鎖的音訊與語音
             unlockAudio();

@@ -121,7 +121,14 @@ interface SnapshotRow {
   prize_snapshot: { face_value: number } | null;
 }
 
-/** 這個帳號最近 N 次的中獎內容，新的在前 */
+/**
+ * 這個帳號最近 N 次的中獎內容，新的在前。
+ *
+ * 只算真正抽出來的。店員或老闆「送」的獎項也會開 token，但送獎時
+ * commit_draw 的 ip_hash 傳 null（見 lib/grant.ts），抽獎兩條路都一定
+ * 有值。不排除的話，送一個 1 元會被當成又抽到一次最低獎，送一個 50
+ * 元則會把連續紀錄打斷。
+ */
 async function recentSnapshots(
   userId: string,
   limit: number,
@@ -130,6 +137,7 @@ async function recentSnapshots(
     .from('draw_tokens')
     .select('prize_snapshot')
     .eq('claimed_by', userId)
+    .not('ip_hash', 'is', null)
     .not('prize_snapshot', 'is', null)
     .order('drawn_at', { ascending: false })
     .limit(limit);

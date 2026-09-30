@@ -24,6 +24,9 @@ import type { PrizeSnapshot } from '@/lib/types';
 /** 查詢時往回看幾分鐘，判斷是不是剛剛才折抵過 */
 const RECENT_REDEEM_MINUTES = 10;
 
+/** 抽獎往回看幾分鐘。一般客人不會在半小時內結帳兩次 */
+const RECENT_DRAW_MINUTES = 30;
+
 export async function loginAction(_prev: unknown, formData: FormData) {
   const staffId = String(formData.get('staffId') ?? '');
   const pin = String(formData.get('pin') ?? '');
@@ -89,15 +92,35 @@ export async function lookupAction(_prev: unknown, formData: FormData) {
   */
   const since = new Date(Date.now() - RECENT_REDEEM_MINUTES * 60_000);
 
-  const { data: recent } = await db()
-    .from('balance_transactions')
-    .select('amount, created_at, staff:staff_id(name)')
-    .eq('user_id', user.id)
-    .eq('type', 'spend')
-    .gte('created_at', since.toISOString())
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  /*
+    同樣的道理套在抽獎上：iPad 代抽沒有跟「這次有沒有消費」綁在一起，
+    同一位客人被重掃一次就能再抽一次。不直接擋，因為真的有人會連買
+    兩次；把「剛剛才抽過」講出來，讓店員自己判斷。
+
+    送獎不算（ip_hash 為 null，見 lib/grant.ts）。
+  */
+  const drawSince = new Date(Date.now() - RECENT_DRAW_MINUTES * 60_000);
+
+  const [{ data: recent }, { data: recentDraw }] = await Promise.all([
+    db()
+      .from('balance_transactions')
+      .select('amount, created_at, staff:staff_id(name)')
+      .eq('user_id', user.id)
+      .eq('type', 'spend')
+      .gte('created_at', since.toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db()
+      .from('draw_tokens')
+      .select('drawn_at, prize_snapshot, staff:issued_by(name)')
+      .eq('claimed_by', user.id)
+      .not('ip_hash', 'is', null)
+      .gte('drawn_at', drawSince.toISOString())
+      .order('drawn_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   return {
     // 掃碼抽獎那條路要拿這個碼再送一次，查詢與抽獎是分開的兩步
@@ -119,6 +142,21 @@ export async function lookupAction(_prev: unknown, formData: FormData) {
             ),
             staffName:
               (recent.staff as unknown as { name: string } | null)?.name ??
+              null,
+          }
+        : null,
+      recentDraw: recentDraw?.drawn_at
+        ? {
+            prizeName:
+              (recentDraw.prize_snapshot as PrizeSnapshot | null)?.name ?? null,
+            minutesAgo: Math.max(
+              0,
+              Math.round(
+                (Date.now() - new Date(recentDraw.drawn_at).getTime()) / 60_000,
+              ),
+            ),
+            staffName:
+              (recentDraw.staff as unknown as { name: string } | null)?.name ??
               null,
           }
         : null,
@@ -337,6 +375,8 @@ export async function drawForMemberAction(
       credit_added: number | null;
       new_balance: number | null;
       coupon_id: string | null;
+      /** 0009 之後才有。撞號時資料庫會換碼，以這個為準 */
+      redeem_code?: string | null;
     }>();
 
   if (claimError || !claim?.ok) {
@@ -353,7 +393,7 @@ export async function drawForMemberAction(
     prize: outcome.prize,
     creditAdded: claim.credit_added ?? 0,
     newBalance: claim.new_balance ?? user.balance,
-    redeemCode: claim.coupon_id ? redeemCode : null,
+    redeemCode: claim.coupon_id ? (claim.redeem_code ?? redeemCode) : null,
   };
 }
 

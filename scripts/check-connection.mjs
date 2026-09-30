@@ -226,6 +226,25 @@ const MIGRATIONS = [
         p_warn_cutoff: new Date().toISOString(),
       }),
   },
+  {
+    file: '0009_redeem_code_and_undo_lock.sql',
+    what: '核銷碼撞號重試、撤銷加鎖',
+    // 不存在的序號只會回 TOKEN_NOT_CLAIMABLE，不寫任何東西。
+    // 新版多回傳一個 redeem_code 欄位，靠它判斷有沒有跑過
+    probe: async () => {
+      const res = await db
+        .rpc('claim_token', {
+          p_code: '__PROBE__',
+          p_user_id: '00000000-0000-0000-0000-000000000000',
+          p_redeem_code: '000000',
+        })
+        .single();
+      if (res.error) return res;
+      return 'redeem_code' in (res.data ?? {})
+        ? res
+        : { error: { message: 'claim_token 還是舊版' } };
+    },
+  },
 ];
 
 for (const m of MIGRATIONS) {
