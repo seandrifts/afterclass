@@ -64,7 +64,7 @@ node -e "console.log(require('bcryptjs').hashSync('你要的PIN', 10))"
 update staff set pin_hash = '$2b$10$...' where role = 'owner';
 ```
 
-然後從 `/staff/login` 登入，右上角會出現「後台」入口。
+然後從老闆入口登入。入口網址用 `node --env-file=.env.local scripts/entry-urls.mjs` 印出來（`/staff/login` 只對走過入口的裝置開放，其他裝置是 404）。
 
 ## 4. 開跑前
 

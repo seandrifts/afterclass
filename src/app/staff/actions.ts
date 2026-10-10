@@ -2,11 +2,13 @@
 
 import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { generateDynamicCode, generateRedeemCode, normalizeCode } from '@/lib/codes';
 import { runDraw } from '@/lib/draw-server';
 import { grantPrize } from '@/lib/grant';
+import { DEVICE_COOKIE, isEnrolledDevice } from '@/lib/entry';
 import { env } from '@/lib/env';
 import { qrSvg } from '@/lib/qr';
 import { getSettings } from '@/lib/settings';
@@ -31,6 +33,18 @@ export async function loginAction(_prev: unknown, formData: FormData) {
   const staffId = String(formData.get('staffId') ?? '');
   const pin = String(formData.get('pin') ?? '');
   const wantedRole = String(formData.get('role') ?? 'staff');
+
+  /*
+    只接受登記過的裝置。
+
+    登入頁藏起來還不夠：server action 可以從站上任何一個網址送出，
+    不需要先打開登入頁。這裡不擋的話，那層隱藏只是畫面上的。
+    回覆刻意講得含糊，不告訴對方缺的是什麼。
+  */
+  const device = (await cookies()).get(DEVICE_COOKIE)?.value;
+  if (!(await isEnrolledDevice(device))) {
+    return { error: '無法登入，請重新整理後再試' };
+  }
 
   if (!staffId || pin.length < MIN_PIN_LENGTH) {
     return { error: `請選擇人員並輸入 ${MIN_PIN_LENGTH} 位數 PIN` };

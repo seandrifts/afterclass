@@ -265,7 +265,7 @@ node -e "console.log(require('bcryptjs').hashSync('1234', 10))"
 update staff set pin_hash = '$2b$10$...' where role = 'owner';
 ```
 
-之後從 `/staff/login` 用「老闆」加上這組 PIN 登入。
+之後從老闆入口用這組 PIN 登入。入口網址用 `node --env-file=.env.local scripts/entry-urls.mjs` 印出來（`/staff/login` 只對走過入口的裝置開放，其他裝置是 404）。
 
 連續打錯 5 次會鎖 15 分鐘。真的鎖住了可以用這行解開：
 
@@ -282,7 +282,7 @@ cd ~/Downloads/lucky-draw
 npm run dev
 ```
 
-打開 <http://localhost:3000/staff/login>，用剛設的 PIN 登入。
+用 `SITE_URL_OVERRIDE=http://localhost:3100 node --env-file=.env.local scripts/entry-urls.mjs` 印出本機的入口網址，打開後用剛設的 PIN 登入。
 
 登入後右上角有「後台」連結，點進去應該看得到儀表板。
 再到「獎項」頁確認機率表跟成本試算有正常顯示。

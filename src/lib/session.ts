@@ -61,7 +61,10 @@ export async function setUserSession(userId: string) {
 export async function getUserSession(): Promise<UserSession | null> {
   const raw = (await cookies()).get(USER_COOKIE)?.value;
   if (!raw) return null;
-  return verify<UserSession>(raw);
+
+  // 所有 cookie 都是同一把金鑰簽的，要確認這張真的是客人的那種
+  const claims = await verify<UserSession>(raw);
+  return typeof claims?.uid === 'string' ? { uid: claims.uid } : null;
 }
 
 export async function clearUserSession() {
