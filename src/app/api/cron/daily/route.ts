@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 import { env } from '@/lib/env';
@@ -34,7 +35,7 @@ const DEADLINE_MS = (maxDuration - 10) * 1000;
 export async function GET(request: Request) {
   const startedAt = Date.now();
   const auth = request.headers.get('authorization');
-  if (auth !== `Bearer ${env.cronSecret()}`) {
+  if (!auth || !sameSecret(auth, `Bearer ${env.cronSecret()}`)) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
 
@@ -115,4 +116,11 @@ export async function GET(request: Request) {
     // 這個數字必須永遠是 0。非 0 代表有人繞過流水帳動了餘額
     integrityBreaches: breaches,
   });
+}
+
+/** 定時比對。先雜湊成等長再比，長度本身也不會從回應時間洩漏 */
+function sameSecret(a: string, b: string): boolean {
+  const ha = createHash('sha256').update(a).digest();
+  const hb = createHash('sha256').update(b).digest();
+  return timingSafeEqual(ha, hb);
 }

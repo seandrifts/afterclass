@@ -164,6 +164,20 @@ async function backup() {
       if (data.length < PAGE) break;
     }
 
+    /*
+      PIN 的雜湊不進備份。
+
+      PIN 只有 6 位數，一百萬種組合，雜湊檔一旦流出去用一般電腦幾分鐘
+      就能全部試完，bcrypt 也擋不住這麼小的空間。備份檔放在筆電上，
+      風險比資料庫本身高，所以這一欄換成佔位值。
+
+      欄位本身留著，還原時表結構才對得上。還原後要重設每個人的 PIN，
+      做法見 README 的「產生真正的 hash」。
+    */
+    if (table === 'staff') {
+      for (const row of rows) row.pin_hash = 'REPLACE_ME_AFTER_RESTORE';
+    }
+
     dump.tables[table] = rows;
     total += rows.length;
     console.log(`  ✓ ${table.padEnd(22)} ${String(rows.length).padStart(6)} 筆`);
@@ -180,7 +194,8 @@ async function backup() {
     .replace(/[:T]/g, '')
     .replace(/-/g, '');
   const file = path.join(dir, `afterclass-${stamp}.json`);
-  writeFileSync(file, JSON.stringify(dump, null, 2));
+  // 裡面是客人的個資，只有自己讀得到
+  writeFileSync(file, JSON.stringify(dump, null, 2), { mode: 0o600 });
 
   const kb = Math.round(statSync(file).size / 1024);
   console.log(`\n  ${file}  ${kb} KB  共 ${total} 筆`);
@@ -303,7 +318,7 @@ async function verify(file) {
 
   console.log(
     bad === 0
-      ? '\n這份備份可用。\n\n還原方式：開新的 Supabase 專案 → 依序執行 supabase/migrations/ → 照 TABLES 的順序把 JSON 灌回去。\n'
+      ? '\n這份備份可用。\n\n還原方式：開新的 Supabase 專案 → 依序執行 supabase/migrations/ → 照 TABLES 的順序把 JSON 灌回去 → 重設每個人的 PIN（備份不含 PIN 雜湊）。\n'
       : `\n有 ${bad} 項不對，不要拿這份當依據。\n`,
   );
 

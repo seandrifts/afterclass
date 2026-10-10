@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { env } from '@/lib/env';
+import { safeNext } from '@/lib/safe-next';
 import { createOAuthState } from '@/lib/session';
 
 /**
@@ -26,16 +27,4 @@ export async function GET(request: Request) {
   authorize.searchParams.set('scope', 'profile openid');
 
   return NextResponse.redirect(authorize);
-}
-
-/**
- * 只接受站內相對路徑。
- *
- * 不擋的話，`?next=https://evil.example` 會讓這個端點變成開放轉址，
- * 可以拿去做釣魚。
- */
-function safeNext(raw: string | null): string {
-  if (!raw) return '/wallet';
-  if (!raw.startsWith('/') || raw.startsWith('//')) return '/wallet';
-  return raw;
 }

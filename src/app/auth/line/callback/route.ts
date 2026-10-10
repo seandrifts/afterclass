@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { env } from '@/lib/env';
+import { safeNext } from '@/lib/safe-next';
 import { consumeOAuthState, setUserSession } from '@/lib/session';
 import { db } from '@/lib/supabase';
 import { upsertLineUser } from '@/lib/users';
@@ -70,7 +71,9 @@ export async function GET(request: Request) {
     return redirectWithError('bad_state');
   }
 
-  const next = stored.next;
+  // state 有簽章，內容照理是我們自己放的。再過一次是為了舊版簽出去、
+  // 還沒過期的 state
+  const next = safeNext(stored.next);
 
   let profile: Awaited<ReturnType<typeof fetchProfile>>;
 

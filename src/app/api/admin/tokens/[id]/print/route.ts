@@ -50,9 +50,12 @@ export async function GET(
     }),
   );
 
+  // 批次名稱是後台自由輸入的文字，直接塞進 HTML 會被當成標籤解析
+  const name = escapeHtml(batch.name);
+
   const html = `<!doctype html>
 <html lang="zh-Hant-TW"><head><meta charset="utf-8">
-<title>${batch.name} 列印清單</title>
+<title>${name} 列印清單</title>
 <style>
   @page { size: A4; margin: 8mm; }
   body { font-family: system-ui, sans-serif; margin: 0; }
@@ -71,7 +74,7 @@ export async function GET(
 </style></head>
 <body>
 <div class="head">
-  ${batch.name} ‧ 共 ${cards.length} 組 ‧ 用瀏覽器列印功能輸出，可另存為 PDF
+  ${name} ‧ 共 ${cards.length} 組 ‧ 用瀏覽器列印功能輸出，可另存為 PDF
 </div>
 <div class="sheet">${cards.join('')}</div>
 </body></html>`;
@@ -79,4 +82,13 @@ export async function GET(
   return new NextResponse(html, {
     headers: { 'content-type': 'text/html; charset=utf-8' },
   });
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

@@ -17,7 +17,7 @@ import {
 } from '@/lib/session';
 import { loginStaff, MIN_PIN_LENGTH } from '@/lib/staff';
 import { db } from '@/lib/supabase';
-import { clientIpHash } from '@/lib/ratelimit';
+import { clientIpHash, hit } from '@/lib/ratelimit';
 import { getUserByWalletCode } from '@/lib/users';
 import type { PrizeSnapshot } from '@/lib/types';
 
@@ -34,6 +34,23 @@ export async function loginAction(_prev: unknown, formData: FormData) {
 
   if (!staffId || pin.length < MIN_PIN_LENGTH) {
     return { error: `請選擇人員並輸入 ${MIN_PIN_LENGTH} 位數 PIN` };
+  }
+
+  /*
+    依來源限流，擋在帳號的失敗計數之前。
+
+    帳號鎖定只算「這個帳號錯了幾次」，不管是誰打的。少了這一層，外人
+    可以不停送錯的 PIN，一邊試密碼一邊把店員鎖在門外。超過額度的請求
+    在這裡就退回，不會進到 loginStaff，也就不會累加失敗次數。
+
+    10 次給得寬，因為店裡的裝置共用同一個對外 IP，交班時幾個人輪流
+    登入、各打錯一兩次是正常的。
+  */
+  const limit = hit(`staff-login:${await clientIpHash()}`, 10, 10 * 60_000);
+  if (!limit.ok) {
+    return {
+      error: `嘗試次數過多，請 ${Math.ceil(limit.retryAfterSec / 60)} 分鐘後再試`,
+    };
   }
 
   const result = await loginStaff(staffId, pin);

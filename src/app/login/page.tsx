@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 
+import { safeNext } from '@/lib/safe-next';
 import { getSettings } from '@/lib/settings';
 import { getUserSession } from '@/lib/session';
 import { IconBowl, IconLine } from '@/components/icons';
@@ -25,10 +26,7 @@ export default async function LoginPage(props: PageProps<'/login'>) {
   const params = await props.searchParams;
   const settings = await getSettings();
 
-  const nextRaw = typeof params.next === 'string' ? params.next : '/wallet';
-  const next = nextRaw.startsWith('/') && !nextRaw.startsWith('//')
-    ? nextRaw
-    : '/wallet';
+  const next = safeNext(typeof params.next === 'string' ? params.next : null);
 
   const errorKey = typeof params.error === 'string' ? params.error : null;
 

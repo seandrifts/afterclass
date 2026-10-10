@@ -1,10 +1,12 @@
 import 'server-only';
 
 import { randomBytes } from 'node:crypto';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
 
 import { env } from './env';
+import { db } from './supabase';
 
 const USER_COOKIE = 'ld_user';
 const STAFF_COOKIE = 'ld_staff';
@@ -84,10 +86,41 @@ export async function setStaffSession(s: StaffSession) {
   });
 }
 
+/**
+ * 回資料庫確認這個帳號現在還能用。
+ *
+ * cookie 是簽了名的 JWT，一發出去就有效 12 小時，中途收不回來。只看
+ * 簽章的話，老闆把離職店員停用之後，對方手上那張 cookie 還能繼續折抵
+ * 到過期為止；角色被調降也一樣不會生效。
+ *
+ * 所以每次都查一次現況：停用就當作沒登入，角色以資料庫為準。
+ * 用 cache() 包起來，同一個請求裡 layout、page、action 各問一次只會
+ * 打一次資料庫。
+ */
+const currentStaff = cache(async (sid: string) => {
+  const { data, error } = await db()
+    .from('staff')
+    .select('name, role, is_active')
+    .eq('id', sid)
+    .maybeSingle();
+
+  // 查不到現況時寧可擋下，不能因為資料庫出錯就放行
+  if (error || !data || !data.is_active) return null;
+
+  return data as { name: string; role: StaffSession['role'] };
+});
+
 export async function getStaffSession(): Promise<StaffSession | null> {
   const raw = (await cookies()).get(STAFF_COOKIE)?.value;
   if (!raw) return null;
-  return verify<StaffSession>(raw);
+
+  const claims = await verify<StaffSession>(raw);
+  if (!claims?.sid) return null;
+
+  const staff = await currentStaff(claims.sid);
+  if (!staff) return null;
+
+  return { sid: claims.sid, name: staff.name, role: staff.role };
 }
 
 export async function clearStaffSession() {

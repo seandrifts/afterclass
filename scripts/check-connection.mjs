@@ -245,6 +245,18 @@ const MIGRATIONS = [
         : { error: { message: 'claim_token 還是舊版' } };
     },
   },
+  {
+    file: '0010_lock_down_functions.sql',
+    what: '函式不對公開金鑰開放',
+    // 函式存在代表跑過；回傳的清單非空代表之後又有函式被開放出去
+    probe: async () => {
+      const res = await db.rpc('exposed_functions');
+      if (res.error) return res;
+      return res.data.length === 0
+        ? res
+        : { error: { message: `仍對外開放：${res.data.join(', ')}` } };
+    },
+  },
 ];
 
 for (const m of MIGRATIONS) {
