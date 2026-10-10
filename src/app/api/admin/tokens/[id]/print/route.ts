@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { getSettings } from '@/lib/settings';
 import { getStaffSession } from '@/lib/session';
 import { db } from '@/lib/supabase';
+import { TICKET_FONT_WOFF2_BASE64 } from '@/lib/ticket-font.generated';
 import { formatDate } from '@/lib/time';
 
 /**
@@ -130,6 +131,10 @@ function escapeHtml(text: string): string {
  *    點數夠整，邊緣不會因為除不盡而忽粗忽細
  * 4. 一張一頁。每頁高度固定，出單機有裁刀的會自己切，
  *    沒有的沿著底下的虛線撕
+ * 5. 字型是 jf open 粉圓，直接嵌在頁面裡（見 scripts/subset-ticket-font.mjs）。
+ *    它只有一種字重，所以 @font-face 宣告成 400–900 全包，瀏覽器才
+ *    不會替粗體硬畫一層合成筆畫，那在熱感紙上會糊掉。
+ *    改了卡片文案要重跑那支腳本，否則新出現的字會退回系統字型
  */
 async function thermalSheet(input: {
   batchName: string;
@@ -157,7 +162,7 @@ async function thermalSheet(input: {
 
       return `<section class="ticket">
   <div class="shop">${shop}</div>
-  <div class="sub">消費回饋抽獎</div>
+  <div class="sub">感謝消費・掃碼抽好禮</div>
   ${svg}
   <div class="code">${code}</div>
   <div class="how">手機相機掃描 QR Code<br>馬上抽獎</div>
@@ -170,11 +175,17 @@ async function thermalSheet(input: {
 <html lang="zh-Hant-TW"><head><meta charset="utf-8">
 <title>${escapeHtml(input.batchName)} 58mm</title>
 <style>
+  @font-face {
+    font-family: "Ticket";
+    src: url(data:font/woff2;base64,${TICKET_FONT_WOFF2_BASE64}) format("woff2");
+    font-weight: 400 900;
+    font-style: normal;
+  }
   @page { size: 58mm 76mm; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
-    font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    font-family: "Ticket", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
     color: #000; background: #fff;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
@@ -192,8 +203,7 @@ async function thermalSheet(input: {
     shape-rendering: crispEdges;
   }
   .code {
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-    font-size: 14pt; font-weight: 700; letter-spacing: 0.06em;
+    font-size: 15pt; font-weight: 700; letter-spacing: 0.08em;
   }
   .how { font-size: 9pt; font-weight: 700; line-height: 1.35; margin-top: 1mm; }
   .fine { font-size: 7pt; font-weight: 700; margin-top: 1.2mm; }
