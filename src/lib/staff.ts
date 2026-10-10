@@ -171,13 +171,33 @@ function isSequential(pin: string): boolean {
 export async function listActiveStaff(
   role?: 'staff' | 'owner',
 ): Promise<{ id: string; name: string; role: 'staff' | 'owner' }[]> {
-  let query = db()
-    .from('staff')
-    .select('id, name, role')
-    .eq('is_active', true);
+  const run = () => {
+    let query = db()
+      .from('staff')
+      .select('id, name, role')
+      .eq('is_active', true);
 
-  if (role) query = query.eq('role', role);
+    if (role) query = query.eq('role', role);
 
-  const { data } = await query.order('name');
-  return data ?? [];
+    return query.order('name');
+  };
+
+  /*
+    查詢失敗不能當成「沒有帳號」。
+
+    原本失敗時回空陣列，登入頁就會顯示「還沒有建立老闆帳號，請執行
+    seed.sql」。資料庫只是一時連不上，畫面卻叫人去重建帳號，照做的話
+    是在正式環境重跑初始資料。
+
+    連線類的失敗多半重試一次就過；還是不行就丟出去，讓頁面顯示
+    「出了點問題，請重新整理」，那才是實情。
+  */
+  let result = await run();
+  if (result.error) result = await run();
+
+  if (result.error) {
+    throw new Error(`讀取人員清單失敗：${result.error.message}`);
+  }
+
+  return result.data ?? [];
 }
