@@ -55,20 +55,33 @@ export async function GET(
 
   if (!batch) return new NextResponse('Not found', { status: 404 });
 
-  if (new URL(request.url).searchParams.get('paper') === '58') {
+  const params = new URL(request.url).searchParams;
+
+  if (params.get('paper') === '58') {
     const settings = await getSettings();
+    const all = tokens ?? [];
+
+    /*
+      第幾張到第幾張。
+
+      張數是整個批次的固定順序（建立時間、再依序號），先切範圍、
+      再濾掉用過的。順序反過來的話，每抽掉一張後面的號碼就全部往前
+      遞補，「上次印到 80、這次從 81 開始」會漏印或重印。
+    */
+    const range = parseRange(params.get('from'), params.get('to'), all.length);
+    if ('error' in range) return plain(range.error, 400);
 
     // 抽過、過期、作廢的不印。印了也只是浪費紙，而且混進去發給客人
     // 會掃出「這組序號已經用過」
-    const printable = (tokens ?? []).filter(
-      (t) => t.status === 'active' || t.status === 'inactive',
-    );
+    const printable = all
+      .slice(range.from - 1, range.to)
+      .filter((t) => t.status === 'active' || t.status === 'inactive');
 
     if (printable.length === 0) {
-      return new NextResponse('這個批次沒有還能用的序號可以印', {
-        status: 409,
-        headers: { 'content-type': 'text/plain; charset=utf-8' },
-      });
+      return plain(
+        `第 ${range.from} 到第 ${range.to} 張裡沒有還能用的序號可以印`,
+        409,
+      );
     }
 
     // 店名是老闆自訂的，可能有字型裡沒收的字。PDF 缺字會印成空白方框，
@@ -79,11 +92,11 @@ export async function GET(
       settings.shop_name,
     );
     if (missing.length > 0) {
-      return new NextResponse(
+      return plain(
         `店名裡的「${missing.join('')}」不在抽獎卡的字型裡，印出來會是空白。\n` +
           '請重新產生字型後再試：\n' +
           'node --env-file=.env.local scripts/subset-ticket-font.mjs <粉圓字型.ttf>',
-        { status: 500, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+        500,
       );
     }
 
@@ -121,7 +134,12 @@ export async function GET(
       action: 'export_ticket_pdf',
       target_type: 'token_batch',
       target_id: id,
-      detail: { 檔名: filename, 張數: printable.length, 批次: batch.name },
+      detail: {
+        檔名: filename,
+        範圍: `${range.from}-${range.to}`,
+        張數: printable.length,
+        批次: batch.name,
+      },
     });
 
     return new NextResponse(Buffer.from(pdf), {
@@ -179,6 +197,42 @@ export async function GET(
   return new NextResponse(html, {
     headers: { 'content-type': 'text/html; charset=utf-8' },
   });
+}
+
+function plain(message: string, status: number) {
+  return new NextResponse(message, {
+    status,
+    headers: { 'content-type': 'text/plain; charset=utf-8' },
+  });
+}
+
+/**
+ * 解析「第幾張到第幾張」。兩個都沒給就是整批。
+ *
+ * 填錯時直接講清楚錯在哪，不默默改成別的範圍。印出來的是實體的卡，
+ * 悄悄幫人改數字的後果是多印或漏印，而且要對著紙才發現得了。
+ */
+function parseRange(
+  rawFrom: string | null,
+  rawTo: string | null,
+  total: number,
+): { from: number; to: number } | { error: string } {
+  if (total === 0) return { error: '這個批次沒有序號' };
+
+  const from = rawFrom === null || rawFrom === '' ? 1 : Number(rawFrom);
+  const to = rawTo === null || rawTo === '' ? total : Number(rawTo);
+
+  if (!Number.isInteger(from) || !Number.isInteger(to)) {
+    return { error: '張數請填整數' };
+  }
+  if (from < 1 || to > total) {
+    return { error: `這個批次只有第 1 到第 ${total} 張` };
+  }
+  if (from > to) {
+    return { error: `起始（第 ${from} 張）不能大於結束（第 ${to} 張）` };
+  }
+
+  return { from, to };
 }
 
 function escapeHtml(text: string): string {

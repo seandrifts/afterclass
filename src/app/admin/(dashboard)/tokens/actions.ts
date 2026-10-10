@@ -82,6 +82,9 @@ export async function activateAction(_prev: unknown, formData: FormData) {
     .select('id')
     .eq('batch_id', batchId)
     .eq('status', 'inactive')
+    // 跟列印的張數同一個順序，「啟用 50 張」才會是「第 1 到 50 張」
+    .order('created_at')
+    .order('code')
     .limit(count);
 
   if (!pending || pending.length === 0) {

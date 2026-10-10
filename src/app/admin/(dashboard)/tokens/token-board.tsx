@@ -153,13 +153,62 @@ function BatchCard({ batch }: { batch: BatchRow }) {
         >
           A4 列印清單
         </a>
+      </form>
 
-        <a
-          href={`/api/admin/tokens/${batch.id}/print?paper=58`}
+      {/*
+        58mm 熱感紙。
+
+        分段印是為了配合出單機的紙卷：一卷印不完 200 張，中途換紙或
+        卡紙時也只要從斷掉的那一張接著印，不用整批重來。
+
+        張數是這個批次裡固定的順序，不會因為有卡被抽掉而往前遞補，
+        所以「上次印到第 80 張，這次從 81 開始」永遠對得上。範圍內
+        已經用過的卡會自動略過。
+
+        用一般的 GET 表單而不是 server action：按下去瀏覽器直接下載
+        檔案，在 iPad 上會存進「檔案」。
+      */}
+      <form
+        method="get"
+        action={`/api/admin/tokens/${batch.id}/print`}
+        className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4"
+      >
+        <input type="hidden" name="paper" value="58" />
+        <label className="block">
+          <span className="text-xs text-ink-soft">從第幾張</span>
+          <input
+            name="from"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={batch.quantity}
+            defaultValue={1}
+            required
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 tabular mt-1 w-24 rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-ink-soft">到第幾張</span>
+          <input
+            name="to"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={batch.quantity}
+            defaultValue={batch.quantity}
+            required
+            className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 tabular mt-1 w-24 rounded-xl border border-line px-3 py-2"
+          />
+        </label>
+        <button
+          type="submit"
           className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl border border-line px-5 py-2.5 text-sm font-bold"
         >
-          58mm 熱感紙 PDF
-        </a>
+          下載 58mm 熱感紙 PDF
+        </button>
+        <span className="basis-full text-xs text-ink-faint">
+          這個批次共 {batch.quantity} 張。已經用過的卡不會印。
+        </span>
       </form>
 
       {state && 'error' in state && state.error ? (
