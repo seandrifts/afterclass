@@ -158,7 +158,7 @@ function BatchCard({ batch }: { batch: BatchRow }) {
           href={`/api/admin/tokens/${batch.id}/print?paper=58`}
           className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl border border-line px-5 py-2.5 text-sm font-bold"
         >
-          58mm 熱感紙
+          58mm 熱感紙 PDF
         </a>
       </form>
 

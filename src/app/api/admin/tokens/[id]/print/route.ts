@@ -4,8 +4,12 @@ import { env } from '@/lib/env';
 import { getSettings } from '@/lib/settings';
 import { getStaffSession } from '@/lib/session';
 import { db } from '@/lib/supabase';
-import { TICKET_FONT_WOFF2_BASE64 } from '@/lib/ticket-font.generated';
-import { formatDate } from '@/lib/time';
+import {
+  loadTicketFont,
+  missingGlyphs,
+  renderTicketPdf,
+} from '@/lib/ticket-pdf';
+import { formatDate, SHOP_TIMEZONE, shopDayStart } from '@/lib/time';
 
 /**
  * 匯出一批序號的列印清單（HTML）。
@@ -19,7 +23,8 @@ import { formatDate } from '@/lib/time';
  *
  * 兩種版面：
  *   預設        A4，一頁 4 欄，給一般印表機或印刷行
- *   ?paper=58   58mm 熱感紙，一張一頁，給店裡的出單機
+ *   ?paper=58   58mm 熱感紙，一張一頁，直接下載成 PDF。店裡的出單機
+ *               是從 iPad 的列印 App 連線的，App 要的是檔案
  */
 export async function GET(
   request: Request,
@@ -47,18 +52,79 @@ export async function GET(
   if (new URL(request.url).searchParams.get('paper') === '58') {
     const settings = await getSettings();
 
-    return new NextResponse(
-      await thermalSheet({
-        batchName: batch.name,
-        shopName: settings.shop_name,
-        // 抽過、過期、作廢的不印。熱感紙一張一張出，印了也只是浪費紙，
-        // 而且混進去發給客人會掃出「這組序號已經用過」
-        tokens: (tokens ?? []).filter(
-          (t) => t.status === 'active' || t.status === 'inactive',
-        ),
-      }),
-      { headers: { 'content-type': 'text/html; charset=utf-8' } },
+    // 抽過、過期、作廢的不印。印了也只是浪費紙，而且混進去發給客人
+    // 會掃出「這組序號已經用過」
+    const printable = (tokens ?? []).filter(
+      (t) => t.status === 'active' || t.status === 'inactive',
     );
+
+    if (printable.length === 0) {
+      return new NextResponse('這個批次沒有還能用的序號可以印', {
+        status: 409,
+        headers: { 'content-type': 'text/plain; charset=utf-8' },
+      });
+    }
+
+    // 店名是老闆自訂的，可能有字型裡沒收的字。PDF 缺字會印成空白方框，
+    // 要等紙印出來才看得到，所以先擋
+    const { PDFDocument } = await import('pdf-lib');
+    const missing = missingGlyphs(
+      await loadTicketFont(await PDFDocument.create()),
+      settings.shop_name,
+    );
+    if (missing.length > 0) {
+      return new NextResponse(
+        `店名裡的「${missing.join('')}」不在抽獎卡的字型裡，印出來會是空白。\n` +
+          '請重新產生字型後再試：\n' +
+          'node --env-file=.env.local scripts/subset-ticket-font.mjs <粉圓字型.ttf>',
+        { status: 500, headers: { 'content-type': 'text/plain; charset=utf-8' } },
+      );
+    }
+
+    const pdf = await renderTicketPdf({
+      shopName: settings.shop_name,
+      siteUrl: env.siteUrl,
+      tickets: printable.map((t) => ({
+        code: t.code,
+        expiry: t.expires_at ? formatDate(t.expires_at) : null,
+      })),
+    });
+
+    /*
+      檔名是「年月日_v第幾版」，例如 20261010_v2.pdf。
+
+      版本號是今天第幾次匯出，靠稽核紀錄數出來的。每匯出一次就記一筆，
+      所以這份紀錄同時也回答了「誰在什麼時候把序號印出去」—— 序號等同
+      抽獎機會，這件事本來就該留痕跡。
+    */
+    const { count } = await db()
+      .from('audit_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('action', 'export_ticket_pdf')
+      .gte('created_at', shopDayStart());
+
+    const version = (count ?? 0) + 1;
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: SHOP_TIMEZONE })
+      .format(new Date())
+      .replaceAll('-', '');
+    const filename = `${today}_v${version}.pdf`;
+
+    await db().from('audit_logs').insert({
+      actor_type: 'staff',
+      actor_id: session.sid,
+      action: 'export_ticket_pdf',
+      target_type: 'token_batch',
+      target_id: id,
+      detail: { 檔名: filename, 張數: printable.length, 批次: batch.name },
+    });
+
+    return new NextResponse(Buffer.from(pdf), {
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': `attachment; filename="${filename}"`,
+        'cache-control': 'no-store',
+      },
+    });
   }
 
   const { default: QRCode } = await import('qrcode');
@@ -116,117 +182,4 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-/**
- * 58mm 熱感紙版面。
- *
- * 幾個跟一般印表機不一樣的地方：
- *
- * 1. 紙寬 58mm，但印字頭只有 48mm 左右，兩側各留 5mm 印不到。
- *    內容寬度照 48mm 排，超出去的部分會直接被切掉
- * 2. 只有黑與白。灰色會被驅動程式換成網點，字會糊、QR 會掃不到，
- *    所以全部用純黑，字重加粗
- * 3. 解析度約每 mm 8 點。QR 邊長 36mm、每格超過 1mm，
- *    點數夠整，邊緣不會因為除不盡而忽粗忽細
- * 4. 一張一頁。每頁高度固定，出單機有裁刀的會自己切，
- *    沒有的沿著底下的虛線撕
- * 5. 字型是 jf open 粉圓，直接嵌在頁面裡（見 scripts/subset-ticket-font.mjs）。
- *    它只有一種字重，所以 @font-face 宣告成 400–900 全包，瀏覽器才
- *    不會替粗體硬畫一層合成筆畫，那在熱感紙上會糊掉。
- *    改了卡片文案要重跑那支腳本，否則新出現的字會退回系統字型
- */
-async function thermalSheet(input: {
-  batchName: string;
-  shopName: string;
-  tokens: { code: string; expires_at: string | null }[];
-}): Promise<string> {
-  const { default: QRCode } = await import('qrcode');
-
-  const shop = escapeHtml(input.shopName);
-
-  const tickets = await Promise.all(
-    input.tokens.map(async (t) => {
-      const svg = await QRCode.toString(`${env.siteUrl}/d/${t.code}`, {
-        type: 'svg',
-        errorCorrectionLevel: 'M',
-        margin: 2,
-      });
-
-      // 中間加一槓比較好念。輸入時有沒有槓都查得到（normalizeCode 會拿掉）
-      const code = `${t.code.slice(0, 4)}-${t.code.slice(4)}`;
-
-      const expiry = t.expires_at
-        ? `<div class="fine">每張限抽一次 ‧ ${formatDate(t.expires_at)} 前有效</div>`
-        : '<div class="fine">每張限抽一次</div>';
-
-      return `<section class="ticket">
-  <div class="shop">${shop}</div>
-  <div class="sub">感謝消費・掃碼抽好禮</div>
-  ${svg}
-  <div class="code">${code}</div>
-  <div class="how">手機相機掃描 QR Code<br>馬上抽獎</div>
-  ${expiry}
-</section>`;
-    }),
-  );
-
-  return `<!doctype html>
-<html lang="zh-Hant-TW"><head><meta charset="utf-8">
-<title>${escapeHtml(input.batchName)} 58mm</title>
-<style>
-  @font-face {
-    font-family: "Ticket";
-    src: url(data:font/woff2;base64,${TICKET_FONT_WOFF2_BASE64}) format("woff2");
-    font-weight: 400 900;
-    font-style: normal;
-  }
-  @page { size: 58mm 76mm; margin: 0; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body {
-    font-family: "Ticket", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
-    color: #000; background: #fff;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact;
-  }
-  .ticket {
-    width: 58mm; height: 75mm; padding: 4mm 5mm 0;
-    text-align: center; overflow: hidden;
-    break-after: page; break-inside: avoid;
-    border-bottom: 0.3mm dashed #000;
-  }
-  .ticket:last-child { break-after: auto; }
-  .shop { font-size: 14pt; font-weight: 900; line-height: 1.2; }
-  .sub { font-size: 9pt; font-weight: 700; margin-top: 0.5mm; }
-  .ticket svg {
-    display: block; width: 36mm; height: 36mm; margin: 1.5mm auto 0;
-    shape-rendering: crispEdges;
-  }
-  .code {
-    font-size: 15pt; font-weight: 700; letter-spacing: 0.08em;
-  }
-  .how { font-size: 9pt; font-weight: 700; line-height: 1.35; margin-top: 1mm; }
-  .fine { font-size: 7pt; font-weight: 700; margin-top: 1.2mm; }
-
-  .head {
-    font-family: system-ui, sans-serif; font-size: 13px; line-height: 1.7;
-    padding: 12px 16px; margin: 0 0 16px; background: #f4f4f4;
-    border-bottom: 1px solid #ccc;
-  }
-  .head b { font-size: 15px; }
-  @media screen {
-    body { background: #ddd; }
-    .ticket { background: #fff; margin: 0 auto 12px; border: 0; }
-  }
-  @media print { .head { display: none; } }
-</style></head>
-<body>
-<div class="head">
-  <b>${escapeHtml(input.batchName)} ‧ 共 ${tickets.length} 張（已用過與過期的不會印）</b><br>
-  按 Ctrl+P（Mac 是 ⌘P），印表機選出單機，紙張選 58mm，邊界選「無」，縮放 100%，
-  關掉「頁首與頁尾」。<br>
-  建議先在列印視窗的「頁面」填 1，印一張確認位置與掃得到，再印全部。
-</div>
-${tickets.join('\n')}
-</body></html>`;
 }
