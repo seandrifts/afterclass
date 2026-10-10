@@ -151,7 +151,14 @@ function BatchCard({ batch }: { batch: BatchRow }) {
           href={`/api/admin/tokens/${batch.id}/print`}
           className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl border border-line px-5 py-2.5 text-sm font-bold"
         >
-          下載列印清單
+          A4 列印清單
+        </a>
+
+        <a
+          href={`/api/admin/tokens/${batch.id}/print?paper=58`}
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl border border-line px-5 py-2.5 text-sm font-bold"
+        >
+          58mm 熱感紙
         </a>
       </form>
 
