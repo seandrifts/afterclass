@@ -26,6 +26,12 @@ import { formatDate, SHOP_TIMEZONE, shopDayStart } from '@/lib/time';
  *   ?paper=58   58mm 熱感紙，一張一頁，直接下載成 PDF。店裡的出單機
  *               是從 iPad 的列印 App 連線的，App 要的是檔案
  */
+/*
+  一批最多 5000 張，PDF 要一頁一頁畫，200 張實測約 8 秒（含冷啟動）。
+  不指定的話用平台預設的上限，張數一多就會被砍在半路。
+*/
+export const maxDuration = 60;
+
 export async function GET(
   request: Request,
   ctx: RouteContext<'/api/admin/tokens/[id]/print'>,
