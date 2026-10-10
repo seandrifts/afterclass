@@ -73,7 +73,13 @@ export async function GET(
 
     // 抽過、過期、作廢的不印。印了也只是浪費紙，而且混進去發給客人
     // 會掃出「這組序號已經用過」
+    // 編號要在濾掉用過的之前就定下來，否則會跟著遞補
+    const digits = Math.max(3, String(all.length).length);
     const printable = all
+      .map((t, i) => ({
+        ...t,
+        label: `No.${String(i + 1).padStart(digits, '0')}`,
+      }))
       .slice(range.from - 1, range.to)
       .filter((t) => t.status === 'active' || t.status === 'inactive');
 
@@ -106,6 +112,7 @@ export async function GET(
       tickets: printable.map((t) => ({
         code: t.code,
         expiry: t.expires_at ? formatDate(t.expires_at) : null,
+        label: t.label,
       })),
     });
 

@@ -23,7 +23,7 @@ import { TICKET_FONT_TTF_BASE64 } from './ticket-font.generated';
      所有內容都置中排在 48mm 內
   2. 只有黑與白。灰色會被換成網點，字會糊、QR 會掃不到
   3. 解析度約每 mm 8 點。QR 每一格取整數點，邊緣才不會忽粗忽細
-  4. 一張一頁，高度固定。有裁刀的機器會自己切，沒有的沿虛線撕
+  4. 一張一頁，高度固定。右下角印這張卡在批次裡的編號
 */
 
 const MM = 72 / 25.4;
@@ -46,6 +46,8 @@ export interface Ticket {
   code: string;
   /** 已經格式化好的到期日，例如「2026/11/24」。沒有期限給 null */
   expiry: string | null;
+  /** 印在右下角的編號，例如「No.081」 */
+  label: string;
 }
 
 export interface TicketSheet {
@@ -132,13 +134,20 @@ function drawTicket(
     y(qrBottom + 19.6),
   );
 
-  // 撕線
-  page.drawLine({
-    start: { x: 0, y: y(75.3) },
-    end: { x: PAGE_W, y: y(75.3) },
-    thickness: 0.3 * MM,
+  /*
+    右下角的編號，也就是這張卡在批次裡是第幾張。
+
+    換紙卷或卡紙時靠它知道印到哪裡，下一份從下一號接著印。
+    靠右對齊在印字頭印得到的範圍內，不是紙的邊緣。
+  */
+  const size = 7;
+  const right = (PAGE_W + PRINTABLE) / 2;
+  page.drawText(ticket.label, {
+    x: right - font.widthOfTextAtSize(ticket.label, size),
+    y: y(73.8),
+    size,
+    font,
     color: BLACK,
-    dashArray: [1.2 * MM, 1 * MM],
   });
 }
 
