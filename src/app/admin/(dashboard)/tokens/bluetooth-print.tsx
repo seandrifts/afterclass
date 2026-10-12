@@ -125,13 +125,23 @@ export function BluetoothPrint({
     if (link.current?.server.connected) return link.current;
     if (!chosen.current) throw new Error('出單機斷線了，請再按一次列印');
 
+    // 連線本身也可能卡住不回應，每次最多等 8 秒就放棄重來
+    const timeout = (ms: number) =>
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('重新連線逾時')), ms),
+      );
+
     let last: unknown;
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      setStatus({
+        kind: 'working',
+        text: `出單機斷線，重新連線中（第 ${attempt + 1} 次）`,
+      });
       try {
-        return await open(chosen.current);
+        return await Promise.race([open(chosen.current), timeout(8000)]);
       } catch (e) {
         last = e;
-        await pause(1500);
+        await pause(2000);
       }
     }
     throw last;
