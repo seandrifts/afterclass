@@ -250,10 +250,10 @@ def escpos_text(shop, code, expiry, label, cut):
     out += b'\n'
 
     out += ESC + b'E\x01' + size(0x11) + line(f'{code[:4]}-{code[4:]}') + size(0x00) + ESC + b'E\x00'
-    out += b'\n'
+    out += ESC + b'J\x10'  # 原本空一整行（約 4mm），改走 16 點（2mm）省紙
     out += line('手機相機掃描 QR Code')
     out += line('馬上抽獎')
-    out += b'\n'
+    out += ESC + b'J\x10'  # 原本空一整行（約 4mm），改走 16 點（2mm）省紙
     out += line('每張限抽一次')
     if expiry:
         out += line(f'{expiry} 前有效')

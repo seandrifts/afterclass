@@ -112,11 +112,12 @@ export function ticketCommands(
   line(`${ticket.code.slice(0, 4)}-${ticket.code.slice(4)}`);
   size(0x00);
   bold(false);
-  out.push(Buffer.from('\n'));
+  // 這兩處原本各空一整行（約 4mm），改成走 16 點（2mm）省紙
+  raw(ESC, 0x4a, 16);
 
   line('手機相機掃描 QR Code');
   line('馬上抽獎');
-  out.push(Buffer.from('\n'));
+  raw(ESC, 0x4a, 16);
   line('每張限抽一次');
   if (ticket.expiry) line(`${ticket.expiry} 前有效`);
 
