@@ -47,3 +47,7 @@ next-env.d.ts
 
 # 資料備份含客人的 LINE ID 與暱稱，是個資，絕不進版控
 backups/
+
+# python
+__pycache__/
+*.pyc
