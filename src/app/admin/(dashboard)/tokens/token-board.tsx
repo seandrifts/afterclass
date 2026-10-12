@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import { activateAction, createBatchAction } from './actions';
+import { BluetoothPrint } from './bluetooth-print';
 import type { BatchRow } from './page';
 import { Button, Card } from '@/components/ui';
 import { formatDate } from '@/lib/time';
@@ -206,6 +207,15 @@ function BatchCard({ batch }: { batch: BatchRow }) {
         >
           下載 58mm 熱感紙 PDF
         </button>
+
+        {/*
+          不經過列印 App，由瀏覽器用藍牙直接把文字指令送給出單機。
+          App 印 PDF 會中途斷線時用這個（原因見 bluetooth-print.tsx）。
+        */}
+        <BluetoothPrint
+          batchId={batch.id}
+          className="cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 rounded-xl border border-line px-5 py-2.5 text-sm font-bold"
+        />
         <span className="basis-full text-xs text-ink-faint">
           這個批次共 {batch.quantity} 張。已經用過的卡不會印。
         </span>
