@@ -50,10 +50,20 @@ interface BtDevice {
 }
 interface Bluetooth {
   requestDevice(options: {
-    acceptAllDevices: boolean;
+    acceptAllDevices?: boolean;
+    filters?: { namePrefix: string }[];
     optionalServices: string[];
   }): Promise<BtDevice>;
 }
+
+/*
+  選擇清單只列名字像出單機的裝置。
+
+  不過濾的話，附近所有藍牙裝置都會出現，而且大多數沒有名字，只顯示
+  一長串代碼，店裡隨便就十幾個，根本找不到哪一台是出單機。
+  這台的名字是 Printer001，其餘是同類機器常見的開頭。
+*/
+const NAME_PREFIXES = ['Printer', 'XP', 'Xprinter', 'POS', 'BlueTooth', 'BT'];
 
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -78,6 +88,8 @@ export function BluetoothPrint({
   className: string;
 }) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  // 出單機被改過名字時，過濾後的清單會是空的，要能退回顯示全部
+  const [showAll, setShowAll] = useState(false);
   // 連上之後留著，同一頁再印下一段不必重新選裝置
   const link = useRef<{ server: BtServer; out: BtCharacteristic } | null>(null);
 
@@ -93,10 +105,14 @@ export function BluetoothPrint({
     }
 
     setStatus({ kind: 'working', text: '請在跳出的清單選擇出單機' });
-    const device = await bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: SERVICES,
-    });
+    const device = await bluetooth.requestDevice(
+      showAll
+        ? { acceptAllDevices: true, optionalServices: SERVICES }
+        : {
+            filters: NAME_PREFIXES.map((namePrefix) => ({ namePrefix })),
+            optionalServices: SERVICES,
+          },
+    );
     if (!device.gatt) throw new Error('這個裝置不能連線');
 
     setStatus({ kind: 'working', text: `連線到 ${device.name ?? '出單機'}` });
@@ -195,6 +211,14 @@ export function BluetoothPrint({
       >
         藍牙直接列印
       </button>
+      <label className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-soft">
+        <input
+          type="checkbox"
+          checked={showAll}
+          onChange={(e) => setShowAll(e.target.checked)}
+        />
+        清單裡找不到出單機時勾這個，改成列出附近所有裝置
+      </label>
       {status.kind !== 'idle' ? (
         <p
           role="status"
