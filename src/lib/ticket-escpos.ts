@@ -81,10 +81,6 @@ export function ticketCommands(
   size(0x00);
   bold(false);
 
-  // 店名與下一行之間多走 16 點（2mm）。不加的話兩行貼在一起；
-  // 空一整行又太開，所以用「走紙幾點」的指令微調
-  raw(ESC, 0x4a, 16);
-
   // 中間的點用「·」。「・」在內建字庫裡是四位元組，印不出來
   line('感謝消費·掃碼抽好禮');
   out.push(Buffer.from('\n'));

@@ -236,7 +236,6 @@ def escpos_text(shop, code, expiry, label, cut):
     out += ESC + b'a\x01'  # 置中
 
     out += ESC + b'E\x01' + size(0x11) + line(shop) + size(0x00) + ESC + b'E\x00'
-    out += ESC + b'J\x10'  # 店名與下一行之間多走 16 點（2mm）
     # 中間的點用「·」。原本的「・」在內建字庫裡是四位元組，印不出來
     out += line('感謝消費·掃碼抽好禮')
     out += b'\n'
