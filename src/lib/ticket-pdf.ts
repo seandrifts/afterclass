@@ -17,25 +17,36 @@ import { TICKET_FONT_TTF_BASE64 } from './ticket-font.generated';
   Chromium，冷啟動多好幾秒。卡片的版面只有幾行字加一個 QR，
   自己算座標畫出來又快又穩，每次結果也一模一樣。
 
-  版面的幾個前提：
+  版面是照出單機（XP-Q90EC）的印字頭排的：
 
-  1. 紙寬 58mm，但印字頭只有 48mm 左右，兩側各 5mm 印不到。
-     所有內容都置中排在 48mm 內
-  2. 只有黑與白。灰色會被換成網點，字會糊、QR 會掃不到
-  3. 解析度約每 mm 8 點。QR 每一格取整數點，邊緣才不會忽粗忽細
-  4. 一張一頁，高度固定。右下角印這張卡在批次裡的編號
+  1. 頁寬 48mm，不是紙寬 58mm。印字頭一行 384 點、每 mm 8 點，實際
+     印得到的就是 48mm。頁面做成一樣寬，列印 App 把頁面對到印字頭時
+     才是一比一，不會被縮小，也不會把兩側印不到的留白算進去
+  2. 所有尺寸以「點」為單位來想。字的大小、間距、QR 的格子都是整數
+     點，轉成點陣時才不會有除不盡的邊
+  3. 字不要太小。粉圓的筆畫細，字高 20 點時筆畫只有 1 到 2 點寬，
+     在螢幕上模擬還讀得出來，但熱感紙實際印 1 點寬的線容易淡掉。
+     所以最小的字留在 24 點以上，太長的那行拆成兩行
+  4. 只有黑與白。灰色會被換成網點，字會糊、QR 會掃不到
+  5. 一張一頁，高度固定。右下角印這張卡在批次裡的編號
 */
 
 const MM = 72 / 25.4;
 
-const PAGE_W = 58 * MM;
-const PAGE_H = 76 * MM;
-
-/** 印字頭實際印得到的寬度 */
-const PRINTABLE = 48 * MM;
-
 /** 熱感印字頭的解析度，每 mm 幾點 */
 const DOTS_PER_MM = 8;
+
+/** 一個印字點在 PDF 裡的長度 */
+const DOT = MM / DOTS_PER_MM;
+
+/** 印字頭一行的點數，也就是頁寬 */
+const HEAD_DOTS = 384;
+
+const PAGE_W = HEAD_DOTS * DOT;
+const PAGE_H = 672 * DOT;
+
+/** 文字左右各留 8 點，貼著印字頭邊緣的那幾點最容易印不清楚 */
+const PRINTABLE = (HEAD_DOTS - 16) * DOT;
 
 /** QR 邊長上限。實際大小會往下取到「每格整數點」 */
 const QR_MAX = 34 * MM;
@@ -107,55 +118,71 @@ function drawTicket(
     color: rgb(1, 1, 1),
   });
 
-  // PDF 的原點在左下角。版面是從上往下想的，所以用「距離頂端幾 mm」換算
-  const y = (mmFromTop: number) => PAGE_H - mmFromTop * MM;
+  /*
+    從上往下排，單位是印字點。
 
-  centered(page, font, fit(font, sheet.shopName, 14), y(8.8));
-  centered(page, font, { text: '感謝消費・掃碼抽好禮', size: 9 }, y(13));
+    cursor 是目前這一行的頂端。每畫一行就往下推「字高 + 行距」，
+    所以改任何一行的大小，後面的會自己讓開。
+  */
+  let cursor = 16;
 
-  const qrBottom = drawQr(page, `${sheet.siteUrl}/d/${ticket.code}`, 15.5);
+  const row = (text: string, dots: number, gapAfter: number) => {
+    centered(page, font, { text, size: dots * DOT }, baseline(cursor, dots));
+    cursor += dots + gapAfter;
+  };
+
+  // 店名可以由老闆自訂，太長就縮字級，不讓它超出印得到的寬度
+  const shop = fit(font, sheet.shopName, 50);
+  centered(page, font, shop, baseline(cursor, 50));
+  cursor += 50 + 10;
+
+  row('感謝消費・掃碼抽好禮', 30, 22);
+
+  cursor = drawQr(page, `${sheet.siteUrl}/d/${ticket.code}`, cursor) + 14;
 
   // 中間加一槓比較好念。輸入時有沒有槓都查得到（normalizeCode 會拿掉）
   const code = `${ticket.code.slice(0, 4)}-${ticket.code.slice(4)}`;
-  spaced(page, font, code, 15, 0.08, y(qrBottom + 6));
+  spaced(page, font, code, 46 * DOT, 4 * DOT, baseline(cursor, 46));
+  cursor += 46 + 16;
 
-  centered(page, font, { text: '手機相機掃描 QR Code', size: 9 }, y(qrBottom + 10.8));
-  centered(page, font, { text: '馬上抽獎', size: 9 }, y(qrBottom + 15));
+  row('手機相機掃描 QR Code', 30, 8);
+  row('馬上抽獎', 30, 18);
 
-  centered(
-    page,
-    font,
-    {
-      text: ticket.expiry
-        ? `每張限抽一次 ‧ ${ticket.expiry} 前有效`
-        : '每張限抽一次',
-      size: 7.5,
-    },
-    y(qrBottom + 19.6),
-  );
+  row('每張限抽一次', 26, 6);
+  if (ticket.expiry) row(`${ticket.expiry} 前有效`, 26, 14);
+  else cursor += 8;
 
   /*
     右下角的編號，也就是這張卡在批次裡是第幾張。
 
     換紙卷或卡紙時靠它知道印到哪裡，下一份從下一號接著印。
-    靠右對齊在印字頭印得到的範圍內，不是紙的邊緣。
   */
-  const size = 7;
+  const size = 24 * DOT;
   const right = (PAGE_W + PRINTABLE) / 2;
   page.drawText(ticket.label, {
     x: right - font.widthOfTextAtSize(ticket.label, size),
-    y: y(73.8),
+    y: baseline(cursor, 24),
     size,
     font,
     color: BLACK,
   });
 }
 
+/**
+ * 一行字的基線位置。
+ *
+ * 排版時想的是「這行的頂端在第幾點」，PDF 要的是基線，而且原點在
+ * 左下角。粉圓的字身大約佔字高的 0.86，基線就在頂端往下那麼多。
+ */
+function baseline(topDots: number, sizeDots: number): number {
+  return PAGE_H - (topDots + sizeDots * 0.86) * DOT;
+}
+
 /** 店名可以由老闆自訂，太長就縮字級，不讓它超出印得到的寬度 */
-function fit(font: PDFFont, text: string, size: number) {
-  let s = size;
-  while (s > 7 && font.widthOfTextAtSize(text, s) > PRINTABLE) s -= 0.5;
-  return { text, size: s };
+function fit(font: PDFFont, text: string, dots: number) {
+  let d = dots;
+  while (d > 24 && font.widthOfTextAtSize(text, d * DOT) > PRINTABLE) d -= 2;
+  return { text, size: d * DOT };
 }
 
 function centered(
@@ -180,10 +207,9 @@ function spaced(
   font: PDFFont,
   text: string,
   size: number,
-  trackingEm: number,
+  gap: number,
   baseline: number,
 ) {
-  const gap = size * trackingEm;
   const chars = [...text];
   const widths = chars.map((ch) => font.widthOfTextAtSize(ch, size));
   const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
@@ -196,7 +222,7 @@ function spaced(
 }
 
 /**
- * 畫 QR，回傳它的底邊距離頁面頂端幾 mm。
+ * 畫 QR，回傳它的底邊在第幾點（從頁面頂端算）。
  *
  * 容錯等級用 M 而不是 H：容錯越高格子越密越細，在油污反光的環境
  * 反而更難掃（理由同 lib/qr.ts）。
@@ -204,17 +230,17 @@ function spaced(
  * 每一格的邊長取「整數個印字點」。除不盡的話印表機會把某些格子多印
  * 或少印一點，黑白邊界就不齊了。
  */
-function drawQr(page: PDFPage, text: string, topMm: number): number {
+function drawQr(page: PDFPage, text: string, topDots: number): number {
   const qr = QRCode.create(text, { errorCorrectionLevel: 'M' });
   const count = qr.modules.size;
   const data = qr.modules.data;
 
   const dots = Math.max(1, Math.floor((QR_MAX / MM) * DOTS_PER_MM / count));
-  const cell = (dots / DOTS_PER_MM) * MM;
-  const side = cell * count;
+  const cell = dots * DOT;
 
-  const left = (PAGE_W - side) / 2;
-  const top = PAGE_H - topMm * MM;
+  // 左邊界也對到整數點，否則整個 QR 會偏半格，每一格的邊都落在兩點之間
+  const left = Math.round((HEAD_DOTS - dots * count) / 2) * DOT;
+  const top = PAGE_H - topDots * DOT;
 
   /*
     整個 QR 畫成「一條路徑、填一次色」。
@@ -240,5 +266,5 @@ function drawQr(page: PDFPage, text: string, topMm: number): number {
 
   page.drawSvgPath(path, { x: left, y: top, scale: cell, color: BLACK });
 
-  return topMm + side / MM;
+  return topDots + dots * count;
 }
