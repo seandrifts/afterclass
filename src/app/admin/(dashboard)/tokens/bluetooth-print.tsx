@@ -92,6 +92,50 @@ export function BluetoothPrint({
   const [showAll, setShowAll] = useState(false);
   // 連上之後留著，同一頁再印下一段不必重新選裝置
   const link = useRef<{ server: BtServer; out: BtCharacteristic } | null>(null);
+  // 選過的裝置也留著：斷線後重連不必再跳一次選擇清單
+  const chosen = useRef<BtDevice | null>(null);
+
+  /** 連上已經選好的裝置，找出可以寫入的通道 */
+  async function open(device: BtDevice) {
+    if (!device.gatt) throw new Error('這個裝置不能連線');
+    const server = await device.gatt.connect();
+
+    // 找第一個可以寫入的通道
+    for (const service of await server.getPrimaryServices()) {
+      for (const ch of await service.getCharacteristics()) {
+        if (ch.properties.write || ch.properties.writeWithoutResponse) {
+          link.current = { server, out: ch };
+          return link.current;
+        }
+      }
+    }
+
+    server.disconnect();
+    throw new Error('連上了，但找不到可以送資料的通道。這台可能不是出單機');
+  }
+
+  /*
+    確認連線還在，斷了就重連。
+
+    這台出單機印完一張、裁刀動過之後常常自己把藍牙斷掉，下一張就送
+    不出去。所以每一張送出前都檢查一次，斷了就接回來。剛斷線的那
+    一兩秒它不一定連得上，多試幾次。
+  */
+  async function ensure() {
+    if (link.current?.server.connected) return link.current;
+    if (!chosen.current) throw new Error('出單機斷線了，請再按一次列印');
+
+    let last: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await open(chosen.current);
+      } catch (e) {
+        last = e;
+        await pause(1500);
+      }
+    }
+    throw last;
+  }
 
   async function connect() {
     if (link.current?.server.connected) return link.current;
@@ -113,26 +157,18 @@ export function BluetoothPrint({
             optionalServices: SERVICES,
           },
     );
-    if (!device.gatt) throw new Error('這個裝置不能連線');
+    chosen.current = device;
 
     setStatus({ kind: 'working', text: `連線到 ${device.name ?? '出單機'}` });
-    const server = await device.gatt.connect();
-
-    // 找第一個可以寫入的通道
-    for (const service of await server.getPrimaryServices()) {
-      for (const ch of await service.getCharacteristics()) {
-        if (ch.properties.write || ch.properties.writeWithoutResponse) {
-          link.current = { server, out: ch };
-          return link.current;
-        }
-      }
-    }
-
-    server.disconnect();
-    throw new Error('連上了，但找不到可以送資料的通道。這台可能不是出單機');
+    return open(device);
   }
 
-  async function send(out: BtCharacteristic, data: Uint8Array<ArrayBuffer>) {
+  /** 回傳已經送出去幾個 bytes，失敗時靠它判斷這張卡有沒有印到一半 */
+  async function send(
+    out: BtCharacteristic,
+    data: Uint8Array<ArrayBuffer>,
+    sent: { bytes: number },
+  ) {
     /*
       一次送一小塊。
 
@@ -149,6 +185,7 @@ export function BluetoothPrint({
         await out.writeValueWithoutResponse(piece);
         await pause(40);
       }
+      sent.bytes = i + piece.length;
     }
   }
 
@@ -156,10 +193,14 @@ export function BluetoothPrint({
     const from = new FormData(form).get('from');
     const to = new FormData(form).get('to');
 
+    // 印到第幾張，出錯時告訴使用者從哪裡接下去
+    let done = 0;
+    let current = '';
+
     try {
       // 先連線再跟伺服器要資料。連線要在使用者按下按鈕的當下發起，
       // 中間插一個網路請求，瀏覽器就不認這次點擊了
-      const { out } = await connect();
+      await connect();
 
       setStatus({ kind: 'working', text: '準備列印內容' });
       const res = await fetch(
@@ -178,9 +219,30 @@ export function BluetoothPrint({
           kind: 'working',
           text: `列印中 ${ticket.label}（${i + 1} / ${body.tickets.length}）`,
         });
-        await send(out, decode(ticket.data));
-        // 等這張印完、裁完再送下一張
-        await pause(1500);
+        current = ticket.label;
+        const data = decode(ticket.data);
+
+        /*
+          還沒送出任何資料就失敗的話，重連再送一次是安全的。
+          送到一半才失敗就不重送：機器已經收到半張，再送一次會印出
+          一張殘缺的加一張完整的，兩張同一組序號。
+        */
+        for (let attempt = 0; ; attempt += 1) {
+          const sent = { bytes: 0 };
+          try {
+            const { out } = await ensure();
+            await send(out, data, sent);
+            break;
+          } catch (e) {
+            link.current = null;
+            if (sent.bytes > 0 || attempt >= 2) throw e;
+            await pause(1000);
+          }
+        }
+        done = i + 1;
+
+        // 等這張印完、裁完再送下一張。機器還在印的時候送，容易斷線
+        if (i < body.tickets.length - 1) await pause(4000);
       }
 
       setStatus({
@@ -190,10 +252,17 @@ export function BluetoothPrint({
     } catch (e) {
       link.current = null;
       const message = e instanceof Error ? e.message : String(e);
+      const where = current
+        ? `印到 ${current} 時中斷，前面 ${done} 張已送出。請把「從第幾張」改成這一張再按一次。`
+        : '';
       setStatus({
         kind: 'error',
         // 使用者自己關掉選擇視窗不算錯誤
-        text: /cancel/i.test(message) ? '已取消' : message,
+        text: /cancel/i.test(message)
+          ? '已取消'
+          : where
+            ? `${where}（${message}）`
+            : message,
       });
     }
   }
