@@ -88,12 +88,14 @@ export function ticketCommands(
   /*
     QR 交給印表機自己畫：選型號、設每格大小、設容錯、存入資料、印出。
 
-    每格 8 點、容錯 M。容錯越高格子越密越細，在油污反光的環境反而
+    每格 5 點、容錯 M，29 格印出來邊長約 18mm，跟電子發票上的 QR
+    差不多大。原本是 8 點（約 29mm），大面積的黑色讓機器耗電升高，
+    印到這裡藍牙容易斷線，所以縮小。容錯越高格子越密越細，在油污反光的環境反而
     更難掃（理由同 lib/qr.ts）。
   */
   const url = Buffer.from(`${siteUrl}/d/${ticket.code}`, 'ascii');
   raw(GS, 0x28, 0x6b, 4, 0, 0x31, 0x41, 0x32, 0);
-  raw(GS, 0x28, 0x6b, 3, 0, 0x31, 0x43, 8);
+  raw(GS, 0x28, 0x6b, 3, 0, 0x31, 0x43, 5);
   raw(GS, 0x28, 0x6b, 3, 0, 0x31, 0x45, 0x31);
   raw(GS, 0x28, 0x6b, (url.length + 3) & 0xff, (url.length + 3) >> 8, 0x31, 0x50, 0x30);
   out.push(url);

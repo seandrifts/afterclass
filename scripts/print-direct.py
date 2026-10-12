@@ -242,7 +242,7 @@ def escpos_text(shop, code, expiry, label, cut):
 
     # QR 交給印表機自己畫：選型號、設每格大小、設容錯、存入資料、印出
     out += GS + b'(k\x04\x00\x31\x41\x32\x00'
-    out += GS + b'(k\x03\x00\x31\x43\x08'  # 每格 8 點，29 格約 29mm
+    out += GS + b'(k\x03\x00\x31\x43\x05'  # 每格 5 點，29 格約 18mm，跟發票的 QR 差不多
     out += GS + b'(k\x03\x00\x31\x45\x31'  # 容錯 M
     out += GS + b'(k' + bytes([(len(url) + 3) & 0xFF, (len(url) + 3) >> 8]) + b'\x31\x50\x30' + url
     out += GS + b'(k\x03\x00\x31\x51\x30'
