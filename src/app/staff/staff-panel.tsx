@@ -512,8 +512,19 @@ function RedeemTab() {
     if (!key || announced.current === key) return;
 
     announced.current = key;
-    if (success) playRedeemSuccessSound();
-    else playErrorSound();
+    if (success) {
+      playRedeemSuccessSound();
+      /*
+        把金額念出來，客人不用看店員的螢幕也知道被扣了多少。
+        內容跟畫面上的字一致。重複送出、實際沒有再扣的那種要講清楚，
+        不然客人聽到金額會以為被扣了兩次。
+      */
+      speakPrize(
+        success.replayed
+          ? `這筆已經折抵過，沒有重複扣款`
+          : `已折抵${success.amount}元`,
+      );
+    } else playErrorSound();
   }, [success, redeemError]);
 
   if (success && !undo?.undone) {
@@ -785,7 +796,12 @@ function RedeemForm({
           type={confirmRepeat ? 'submit' : 'button'}
           size="lg"
           disabled={pending || amount <= 0 || !acknowledged}
-          onClick={confirmRepeat ? undefined : () => setConfirmRepeat(true)}
+          onClick={() => {
+            // 語音要在按下的當下解鎖，等伺服器回來才解鎖 iPad 不認
+            unlockAudio();
+            primeSpeech();
+            if (!confirmRepeat) setConfirmRepeat(true);
+          }}
         >
           {pending
             ? '處理中⋯'
