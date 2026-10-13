@@ -144,6 +144,36 @@ export function ScanInput({
     inputRef.current?.focus();
   }
 
+  /*
+    照「按的是哪一顆實體按鍵」來決定打出什麼字，不看系統翻譯後的結果。
+
+    條碼槍是模擬鍵盤：它送的是「第幾顆鍵」，由裝置依目前的鍵盤配置
+    翻成字。配置跟條碼槍預設的美式鍵盤不一樣時，同一顆鍵會翻成別的
+    字，掃出來的會員碼就跟客人畫面上的不同，查不到人。
+
+    會員碼與核銷碼只有英文字母與數字，所以直接用按鍵位置還原：
+    KeyA 就是 A、Digit3 就是 3。螢幕鍵盤不會報按鍵位置，照原本的路
+    走；中文輸入法正在組字時攔不住，也照原本的路走。
+  */
+  function typePhysicalKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+
+    const match = /^(?:Key([A-Z])|(?:Digit|Numpad)([0-9]))$/.exec(e.code);
+    if (!match) return;
+    const ch = match[1] ?? match[2];
+    if (numeric && !match[2]) return;
+
+    const input = e.currentTarget;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? start;
+    e.preventDefault();
+    if (maxLength && input.value.length - (end - start) >= maxLength) return;
+
+    input.setRangeText(ch, start, end, 'end');
+    setValue(input.value);
+  }
+
   const scanning = state === 'scanning' || state === 'starting';
 
   return (
@@ -227,7 +257,10 @@ export function ScanInput({
             所以 autoSubmit 關掉時要主動吃掉 Enter。Enter 在表單裡預設
             就會送出，不攔的話「不自動送出」這個設定等於沒有作用。
           */
-          if (e.key !== 'Enter' && e.key !== 'Tab') return;
+          if (e.key !== 'Enter' && e.key !== 'Tab') {
+            typePhysicalKey(e);
+            return;
+          }
 
           if (!autoSubmit) {
             if (e.key === 'Enter') e.preventDefault();
