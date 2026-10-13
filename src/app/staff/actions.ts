@@ -132,16 +132,15 @@ export async function lookupAction(_prev: unknown, formData: FormData) {
   */
   const drawSince = new Date(Date.now() - RECENT_DRAW_MINUTES * 60_000);
 
-  const [{ data: recent }, { data: recentDraw }] = await Promise.all([
+  const [{ data: recentSpends }, { data: recentDraw }] = await Promise.all([
     db()
       .from('balance_transactions')
-      .select('amount, created_at, staff:staff_id(name)')
+      .select('id, amount, created_at, staff:staff_id(name)')
       .eq('user_id', user.id)
       .eq('type', 'spend')
       .gte('created_at', since.toISOString())
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(10),
     db()
       .from('draw_tokens')
       .select('drawn_at, prize_snapshot, staff:issued_by(name)')
@@ -152,6 +151,29 @@ export async function lookupAction(_prev: unknown, formData: FormData) {
       .limit(1)
       .maybeSingle(),
   ]);
+
+  /*
+    已經撤銷的折抵不算「剛折抵過」。
+
+    扣錯金額、撤銷、重扣是很正常的流程，撤銷後錢已經退回去了，
+    還跳警告只是讓店員多按一下。撤銷會留下一筆指向原交易的調整
+    紀錄（見 undo_redeem），拿它來排除。
+  */
+  const spends = recentSpends ?? [];
+  let recent: (typeof spends)[number] | null = null;
+  if (spends.length > 0) {
+    const { data: undone } = await db()
+      .from('balance_transactions')
+      .select('source_id')
+      .eq('type', 'adjust')
+      .eq('source_type', 'redeem')
+      .in(
+        'source_id',
+        spends.map((t) => t.id),
+      );
+    const undoneIds = new Set((undone ?? []).map((t) => t.source_id));
+    recent = spends.find((t) => !undoneIds.has(t.id)) ?? null;
+  }
 
   return {
     // 掃碼抽獎那條路要拿這個碼再送一次，查詢與抽獎是分開的兩步

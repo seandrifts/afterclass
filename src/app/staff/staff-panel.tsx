@@ -527,6 +527,12 @@ function RedeemTab() {
     } else playErrorSound();
   }, [success, redeemError]);
 
+  // 撤銷也要講。客人剛聽到「已折抵」，錢退回去卻沒聲音，他會以為還是扣了
+  const undone = Boolean(undo?.undone);
+  useEffect(() => {
+    if (undone) speakPrize('已撤銷，金額已退回', 0);
+  }, [undone]);
+
   if (success && !undo?.undone) {
     return (
       <div className="rounded-card bg-good p-8 text-center text-white">
@@ -545,6 +551,10 @@ function RedeemTab() {
             <button
               type="submit"
               disabled={undoing}
+              onClick={() => {
+                unlockAudio();
+                primeSpeech();
+              }}
               className="min-h-12 w-full rounded-xl border-2 border-white/60 text-base font-bold"
             >
               {undoing ? '撤銷中⋯' : '扣錯了，撤銷這筆'}
@@ -796,11 +806,23 @@ function RedeemForm({
           type={confirmRepeat ? 'submit' : 'button'}
           size="lg"
           disabled={pending || amount <= 0 || !acknowledged}
-          onClick={() => {
+          onClick={(e) => {
             // 語音要在按下的當下解鎖，等伺服器回來才解鎖 iPad 不認
             unlockAudio();
             primeSpeech();
-            if (!confirmRepeat) setConfirmRepeat(true);
+
+            /*
+              第一下只切換成確認狀態，不能送出。
+
+              按鈕的 type 會在這一下之內就從 button 變成 submit（React
+              在事件處理完當下就更新畫面），瀏覽器接著看到的已經是
+              submit，於是同一下就把表單送出去，二次確認形同虛設。
+              所以要明確擋掉這一下的預設動作。
+            */
+            if (!confirmRepeat) {
+              e.preventDefault();
+              setConfirmRepeat(true);
+            }
           }}
         >
           {pending
