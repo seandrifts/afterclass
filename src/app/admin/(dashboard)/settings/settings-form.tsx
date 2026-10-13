@@ -196,6 +196,18 @@ export function SettingsForm({ settings }: { settings: Settings }) {
             defaultValue={settings.staff_grant_max_value}
           />
         </Field>
+        {/* 欄位是 0011 才加的。還沒跑 migration 就不顯示，免得存檔失敗 */}
+        {settings.max_staff_draws_per_day !== undefined ? (
+          <Field
+            label="店員每天可幫同一位會員抽幾次"
+            hint="防止同一位客人被重複掃碼多抽。只算店員發動的抽獎，客人自己掃紙卡、送獎項都不算。達到上限後店員端會擋下來，你自己登入操作不受限制。填 0 等於不限制"
+          >
+            <Num
+              name="max_staff_draws_per_day"
+              defaultValue={settings.max_staff_draws_per_day}
+            />
+          </Field>
+        ) : null}
       </Section>
 
       <Section title="活動辦法">

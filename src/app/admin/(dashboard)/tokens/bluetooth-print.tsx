@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
 
 /*
@@ -87,6 +88,7 @@ export function BluetoothPrint({
   batchId: string;
   className: string;
 }) {
+  const router = useRouter();
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   // 出單機被改過名字時，過濾後的清單會是空的，要能退回顯示全部
   const [showAll, setShowAll] = useState(false);
@@ -206,6 +208,8 @@ export function BluetoothPrint({
     // 印到第幾張，出錯時告訴使用者從哪裡接下去
     let done = 0;
     let current = '';
+    // 最後一張成功送出的是第幾張，印完或中斷後回報給伺服器
+    let lastNo = 0;
 
     try {
       // 先連線再跟伺服器要資料。連線要在使用者按下按鈕的當下發起，
@@ -218,7 +222,7 @@ export function BluetoothPrint({
       );
       const body = (await res.json()) as {
         error?: string;
-        tickets?: { label: string; data: string }[];
+        tickets?: { no: number; label: string; data: string }[];
       };
       if (!res.ok || !body.tickets) {
         throw new Error(body.error ?? '取得列印內容失敗');
@@ -250,10 +254,15 @@ export function BluetoothPrint({
           }
         }
         done = i + 1;
+        lastNo = ticket.no;
 
         // 等這張印完、裁完再送下一張。機器還在印的時候送，容易斷線
         if (i < body.tickets.length - 1) await pause(4000);
       }
+
+      // 整段都印完時記到範圍的結尾：結尾那幾張如果是用過被略過的，
+      // 下次也不必再從它們開始
+      lastNo = Math.max(lastNo, Number(to));
 
       setStatus({
         kind: 'done',
@@ -263,7 +272,7 @@ export function BluetoothPrint({
       link.current = null;
       const message = e instanceof Error ? e.message : String(e);
       const where = current
-        ? `印到 ${current} 時中斷，前面 ${done} 張已送出。請把「從第幾張」改成這一張再按一次。`
+        ? `印到 ${current} 時中斷，前面 ${done} 張已送出。「從第幾張」已經幫你改成接續的那一張，確認出單機正常後再按一次列印。`
         : '';
       setStatus({
         kind: 'error',
@@ -274,6 +283,37 @@ export function BluetoothPrint({
             ? `${where}（${message}）`
             : message,
       });
+    } finally {
+      if (done > 0) await report(form, Number(from), lastNo, done);
+    }
+  }
+
+  /*
+    回報印到第幾張，並把「從第幾張」改成下一張。
+
+    回報失敗不影響已經印出來的卡，所以錯誤直接吞掉 —— 最壞的情況只是
+    後台的「上次印到」沒更新。
+  */
+  async function report(
+    form: HTMLFormElement,
+    from: number,
+    last: number,
+    count: number,
+  ) {
+    const input = form.elements.namedItem('from');
+    if (input instanceof HTMLInputElement && last < Number(input.max)) {
+      input.value = String(last + 1);
+    }
+
+    try {
+      await fetch(`/api/admin/tokens/${batchId}/printed`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ from, last, count }),
+      });
+      router.refresh();
+    } catch {
+      // 見上方說明
     }
   }
 

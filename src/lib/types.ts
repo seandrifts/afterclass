@@ -52,6 +52,8 @@ export interface Settings {
 
   /** 店員在店員端可送出的獎項面額上限。0 = 不開放 */
   staff_grant_max_value: number;
+  /** 0011 之後才有。還沒跑 migration 時是 undefined，當成 0（不限制） */
+  max_staff_draws_per_day?: number;
 
   push_enabled: boolean;
   push_expiry_enabled: boolean;

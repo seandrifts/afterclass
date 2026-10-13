@@ -865,8 +865,11 @@ function CouponTab() {
     if (!key || announced.current === key) return;
 
     announced.current = key;
-    if (success) playRedeemSuccessSound();
-    else playErrorSound();
+    if (success) {
+      playRedeemSuccessSound();
+      // 念出核銷的是什麼，客人與店員都不用看螢幕確認
+      speakPrize(`已核銷，${success.prizeName ?? '實物券'}`);
+    } else playErrorSound();
   }, [success, couponError]);
 
   if (success) {
@@ -904,7 +907,15 @@ function CouponTab() {
         </p>
       ) : null}
 
-      <Button type="submit" size="lg" loading={pending} onClick={unlockAudio}>
+      <Button
+        type="submit"
+        size="lg"
+        loading={pending}
+        onClick={() => {
+          unlockAudio();
+          primeSpeech();
+        }}
+      >
         {pending ? '核銷中' : '核銷'}
       </Button>
     </form>
@@ -1029,6 +1040,15 @@ function GiftTab({ prizes }: { prizes: Prize[] }) {
     announced.current = error;
     playErrorSound();
   }, [error, needsConfirm]);
+
+  // 送出成功也念出來，內容就是畫面上那句
+  const savedMessage =
+    state && 'saved' in state && state.saved ? state.message : null;
+  useEffect(() => {
+    if (!savedMessage) return;
+    playRedeemSuccessSound();
+    speakPrize(savedMessage.replace(/[「」]/g, ''));
+  }, [savedMessage]);
 
   if (state && 'saved' in state && state.saved) {
     return (

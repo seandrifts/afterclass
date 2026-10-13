@@ -37,6 +37,8 @@ const schema = z.object({
   pity_threshold: z.coerce.number().int().min(1),
   // 0 = 不開放店員送獎項。上限不設天花板，老闆自己決定
   staff_grant_max_value: z.coerce.number().int().min(0),
+  // 0 = 不限制。欄位是 0011 才加的，還沒跑 migration 時表單不會送這一欄
+  max_staff_draws_per_day: z.coerce.number().int().min(0).optional(),
 
   rules_content: z.string().max(20000),
 });

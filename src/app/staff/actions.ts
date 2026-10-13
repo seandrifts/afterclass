@@ -19,6 +19,7 @@ import {
 } from '@/lib/session';
 import { loginStaff, MIN_PIN_LENGTH } from '@/lib/staff';
 import { db } from '@/lib/supabase';
+import { shopDayStart } from '@/lib/time';
 import { clientIpHash, hit } from '@/lib/ratelimit';
 import { getUserByWalletCode } from '@/lib/users';
 import type { PrizeSnapshot } from '@/lib/types';
@@ -383,6 +384,30 @@ export async function drawForMemberAction(
   const user = await getUserByWalletCode(walletCode);
   if (!user) return { error: '查不到這組會員碼，請客人先掃櫃檯的加入會員 QR' };
   if (user.is_blocked) return { error: '這個帳號已被停用' };
+
+  /*
+    每日上限。
+
+    只算店員發動的抽獎（kind = dynamic），客人自己掃紙卡不算：紙卡是
+    一張對一次消費，本身就有憑證。送獎項也不算（ip_hash 為 null，
+    見 lib/grant.ts）。老闆不受限，真的有客人一天來好幾次時由他處理。
+  */
+  const cap = (await getSettings()).max_staff_draws_per_day ?? 0;
+  if (cap > 0 && staff.role !== 'owner') {
+    const { count } = await db()
+      .from('draw_tokens')
+      .select('id', { count: 'exact', head: true })
+      .eq('claimed_by', user.id)
+      .eq('kind', 'dynamic')
+      .not('ip_hash', 'is', null)
+      .gte('drawn_at', shopDayStart());
+
+    if ((count ?? 0) >= cap) {
+      return {
+        error: `這位客人今天已經抽過 ${count} 次，達到每日上限（${cap} 次）。需要再抽請老闆登入操作`,
+      };
+    }
+  }
 
   /*
     先開一張只給這次用的 token。

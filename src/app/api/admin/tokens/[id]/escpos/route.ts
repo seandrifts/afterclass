@@ -72,11 +72,14 @@ export async function GET(
   const tickets = all
     .map((t, i) => ({
       ...t,
+      no: i + 1,
       label: `No.${String(i + 1).padStart(digits, '0')}`,
     }))
     .slice(from - 1, to)
     .filter((t) => t.status === 'active' || t.status === 'inactive')
     .map((t) => ({
+      // 第幾張。印完後瀏覽器拿它回報「印到哪一張」
+      no: t.no,
       label: t.label,
       data: ticketCommands(settings.shop_name, env.siteUrl, {
         code: t.code,

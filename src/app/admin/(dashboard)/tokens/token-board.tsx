@@ -183,7 +183,12 @@ function BatchCard({ batch }: { batch: BatchRow }) {
             inputMode="numeric"
             min={1}
             max={batch.quantity}
-            defaultValue={1}
+            // 接著上次印到的地方。全部印完了就回到第 1 張
+            defaultValue={
+              batch.lastPrinted && batch.lastPrinted.last < batch.quantity
+                ? batch.lastPrinted.last + 1
+                : 1
+            }
             required
             className="transition-colors focus:border-brand-500 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-300 tabular mt-1 w-24 rounded-xl border border-line px-3 py-2"
           />
@@ -218,6 +223,13 @@ function BatchCard({ batch }: { batch: BatchRow }) {
         />
         <span className="basis-full text-xs text-ink-faint">
           這個批次共 {batch.quantity} 張。已經用過的卡不會印。
+          {batch.lastPrinted
+            ? ` 上次藍牙列印：第 ${batch.lastPrinted.range.replace('-', ' 到 ')} 張（${formatDate(batch.lastPrinted.at)}）${
+                batch.lastPrinted.last < batch.quantity
+                  ? `，下一張是第 ${batch.lastPrinted.last + 1} 張。`
+                  : '，已印到最後一張。'
+              }`
+            : ''}
         </span>
       </form>
 
