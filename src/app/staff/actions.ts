@@ -11,7 +11,7 @@ import { grantPrize } from '@/lib/grant';
 import { DEVICE_COOKIE, isEnrolledDevice } from '@/lib/entry';
 import { env } from '@/lib/env';
 import { qrSvg } from '@/lib/qr';
-import { getSettings } from '@/lib/settings';
+import { getSettings, isCampaignOpen } from '@/lib/settings';
 import {
   clearStaffSession,
   getStaffSession,
@@ -392,7 +392,18 @@ export async function drawForMemberAction(
     一張對一次消費，本身就有憑證。送獎項也不算（ip_hash 為 null，
     見 lib/grant.ts）。老闆不受限，真的有客人一天來好幾次時由他處理。
   */
-  const cap = (await getSettings()).max_staff_draws_per_day ?? 0;
+  const settings = await getSettings();
+
+  /*
+    活動暫停時先擋下來，不要開 token。
+
+    runDraw 本身也會擋，但那時 token 已經開好了：它算在「今日發放」
+    裡，暫停期間店員每按一次，報表就多一張實際上沒發出去的抽獎。
+  */
+  const campaign = isCampaignOpen(settings);
+  if (!campaign.open) return { error: campaign.reason ?? '活動目前暫停中' };
+
+  const cap = settings.max_staff_draws_per_day ?? 0;
   if (cap > 0 && staff.role !== 'owner') {
     const { count } = await db()
       .from('draw_tokens')
