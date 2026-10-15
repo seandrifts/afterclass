@@ -10,6 +10,9 @@ import type { Prize, Settings } from '@/lib/types';
  * 這裡把最大獎與「100% 中獎」明確講出來。大獎看得到本身就是
  * 參與動機，即使機率只有 0.3%；而 100% 中獎則解除「會不會摸彩摸空」
  * 的疑慮，這兩件事都直接影響客人願不願意按下那顆按鈕。
+ *
+ * 兩者要分開放。「100% 中獎」原本貼在最大獎的框裡，客人會讀成
+ * 「100% 抽中最大獎」，抽到小獎時覺得被騙。
  */
 export function PrizeStrip({
   prizes,
@@ -33,22 +36,18 @@ export function PrizeStrip({
 
   return (
     <section className="mt-6" aria-label="獎項一覽">
-      <div className="rounded-card border-2 border-amber-300 bg-linear-to-br from-amber-50 to-brand-50 p-4">
-        {/*
-          徽章跟「最大獎」放同一行，讓獎項名稱獨佔整行。
+      <p className="mb-3 flex items-center justify-center gap-2 text-sm font-bold text-ink-soft">
+        <span className="rounded-full bg-good px-3 py-1 text-xs font-black text-white">
+          100% 中獎
+        </span>
+        每次抽獎一定會抽中以下其中一項
+      </p>
 
-          原本兩者並排，中文沒有空格可斷，較長的獎項名稱會被擠成
-          「免單（下次 / 消費全免）」，斷在括號中間很難讀。
-        */}
-        <div className="flex items-center justify-between gap-2">
-          <p className="inline-flex items-center gap-1 text-xs font-bold text-amber-700">
-            <IconSparkle className="size-3.5" />
-            最大獎
-          </p>
-          <span className="shrink-0 rounded-full bg-good px-3 py-1 text-xs font-black text-white">
-            100% 中獎
-          </span>
-        </div>
+      <div className="rounded-card border-2 border-amber-300 bg-linear-to-br from-amber-50 to-brand-50 p-4">
+        <p className="inline-flex items-center gap-1 text-xs font-bold text-amber-700">
+          <IconSparkle className="size-3.5" />
+          最大獎
+        </p>
 
         <p className="mt-2 text-2xl font-black text-balance text-amber-700">
           {top.name}
